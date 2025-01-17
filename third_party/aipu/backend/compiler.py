@@ -1,28 +1,29 @@
 from triton.backends.compiler import BaseBackend, GPUTarget
-from triton._C.libtriton import ir, passes, llvm, aipu
+from triton._C.libtriton import ir, aipu
 
 from dataclasses import dataclass
 import functools
-from typing import Any, Dict, Tuple, Optional
-from types import ModuleType
 import hashlib
-import re
-import tempfile
-import signal
-import os
-import subprocess
-from pathlib import Path
-import sysconfig
+from typing import Any, Dict
+from types import ModuleType
 
 
 @dataclass(frozen=True)
 class AIPUOptions:
     num_tecs: int = 4
-    num_stages: int = 1
+    num_stages: int = 2
     num_cores: int = 3
     cluster_dims: tuple = (1, 1, 1)
     arch: str = "x2"
     backend_name: str = "aipu"
+    debug: bool = False
+    sanitize_overflow: bool = True
+
+    def hash(self):
+        hash_dict = dict(self.__dict__)
+        key = "_".join([f"{name}-{val}" for name, val in sorted(hash_dict.items())])
+        return hashlib.sha256(key.encode("utf-8")).hexdigest()
+
 
 
 class AIPUBackend(BaseBackend):
@@ -34,8 +35,26 @@ class AIPUBackend(BaseBackend):
     def __init__(self, target: GPUTarget) -> None:
         super().__init__(target)
         self.capability = target.arch
-        assert isinstance(self.capability, int)
         self.binary_ext = "bin"
+
+    def parse_options(self, opts) -> Any:
+        return AIPUOptions()
+
+    def pack_metadata(self, metadata):
+        return (
+            metadata.num_tecs,
+            metadata.num_cores,
+            metadata.cluster_dims[0],
+            metadata.cluster_dims[1],
+            metadata.cluster_dims[2],
+        )
+
+    def get_codegen_implementation(self):
+        return {}
+
+    def get_module_map(self) -> Dict[str, ModuleType]:
+        from triton.language.extra.cuda import libdevice
+        return {"triton.language.extra.libdevice": libdevice}
 
     def load_dialects(self, ctx):
         aipu.load_dialects(ctx)
@@ -48,15 +67,20 @@ class AIPUBackend(BaseBackend):
         pm.run(mod)
         return mod
 
-    def get_module_map(self):
-        return {}
+    @staticmethod
+    def make_aipubin(mod, metadata, opt):
+        metadata["name"] = "vector_add"
+        metadata["shared"] = 0
+        file_path = '/project/ai/scratch01/arozha01/share/aipu.bin'
+        binary_content = ""
 
-    def parse_options(self, opts):
-        return AIPUOptions(4, 1, 3, (1, 1, 1), "x2", "aipu")
+        with open(file_path, 'rb') as file:
+            binary_content = file.read()
+        return binary_content
 
     def add_stages(self, stages, options):
-        # add new build stages here
         stages["ttir"] = lambda src, metadata: self.make_ttir(src, metadata, options)
+        stages["bin"] = lambda src, metadata: self.make_aipubin(src, metadata, options)
 
     @functools.lru_cache()
     def hash(self):

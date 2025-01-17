@@ -13,6 +13,8 @@
 #include <ATen/InferSize.h>
 
 #include <standard_api.h>
+#include <internal/internal_api.h>
+
 #include <mutex>
 #include <unordered_map>
 
@@ -26,10 +28,74 @@ C10_REGISTER_GUARD_IMPL(
     c10::impl::NoOpDeviceGuardImpl<DeviceType::PrivateUse1>);
 }}
 
+
+#define AIPU_DRIVER_HANDLE_ERROR(status)                            \
+  do {                                                              \
+    if (status != AIPU_STATUS_SUCCESS) {                            \
+      const char* error_message = nullptr;                          \
+      aipu_get_error_message(aipu_ctx_, status, &error_message);         \
+      std::cout << error_message; \
+    }                                                               \
+  } while (false)
+
+
+/*! \brief Return whether a string starts with the given prefix. */
+inline bool StrStartsWith(const std::string& str, const std::string& prefix) {
+  if (prefix.size() > str.size()) return false;
+  return std::equal(str.c_str(), str.c_str() + prefix.size(), prefix.c_str());
+}
+
+
+class Context final {
+  public:
+    aipu_ctx_handle_t* process_ctx = nullptr;
+    std::mutex inst_lock;
+    Context() {
+      if (process_ctx == nullptr) {
+        std::lock_guard<std::mutex> lock(inst_lock);
+        if (process_ctx == nullptr) {
+          aipu_status_t status = aipu_init_context(&process_ctx);
+          if (status != AIPU_STATUS_SUCCESS) {
+            //
+          }
+        }
+      }
+    };
+    ~Context() {
+      if (process_ctx != nullptr) {
+        std::lock_guard<std::mutex> lock(inst_lock);
+        if (process_ctx != nullptr) {
+          aipu_status_t status = aipu_deinit_context(process_ctx);
+          if (status != AIPU_STATUS_SUCCESS) {
+            //
+          }
+          process_ctx = nullptr;
+        }
+      }
+    };
+};
+
+Context* context() {
+  static const std::unique_ptr<Context> context([]() -> Context* {
+    try {
+      return new Context();
+    } catch (...) {
+    }
+    return nullptr;
+  }());
+
+  return context.get();
+}
+
+
 struct AIPUAllocator final : at::Allocator {
   AIPUAllocator() = default;
+
   at::DataPtr allocate(size_t nbytes) override {
-    void* data = c10::alloc_cpu(nbytes);
+    void* data = nullptr;
+    status_ = aipu_malloc(aipu_ctx_, nbytes, 32, 0, &data);
+    AIPU_DRIVER_HANDLE_ERROR(status_);
+
     std::cerr << "alloc with aipu allocator for " << nbytes << " bytes with ptr " << (uint64_t)data << std::endl;
     return {data, data, &ReportAndDelete, at::Device(at::DeviceType::PrivateUse1, aipu_device_index)};
   }
@@ -38,7 +104,8 @@ struct AIPUAllocator final : at::Allocator {
     if (!ptr) {
       return;
     }
-    c10::free_cpu(ptr);
+    status_ = aipu_free(aipu_ctx_, &ptr);
+    AIPU_DRIVER_HANDLE_ERROR(status_);
   }
 
   at::DeleterFnPtr raw_deleter() const override {
@@ -48,9 +115,14 @@ struct AIPUAllocator final : at::Allocator {
   void copy_data(void* dest, const void* src, std::size_t count) const final {
     default_copy_data(dest, src, count);
   }
+
+  static aipu_ctx_handle_t* aipu_ctx_;
+  static aipu_status_t status_;
 };
 
 // Register our dummy allocator
+aipu_ctx_handle_t* AIPUAllocator::aipu_ctx_ = context()->process_ctx;
+aipu_status_t AIPUAllocator::status_ = AIPU_STATUS_SUCCESS;
 static AIPUAllocator global_custom_alloc;
 REGISTER_ALLOCATOR(c10::DeviceType::PrivateUse1, &global_custom_alloc);
 
@@ -100,7 +172,16 @@ at::Tensor aipu_view(const at::Tensor& self, c10::IntArrayRef size) {
 }
 
 at::Tensor aipu_copy_from(const at::Tensor& self, const at::Tensor& dst, bool non_blocking=false) {
-  std::memcpy(dst.data_ptr(), self.data_ptr(), self.nbytes());
+  auto kind = AIPU_MEMCPY_HOST_TO_DEVICE;
+  if (StrStartsWith(self.device().str(), "aipu")) {
+    kind = AIPU_MEMCPY_DEVICE_TO_HOST;
+  }
+  aipu_memcpy(
+    AIPUAllocator::aipu_ctx_,
+    dst.data_ptr(),
+    self.data_ptr(),
+    self.nbytes(),
+    kind);
   return self;
 }
 
@@ -114,55 +195,14 @@ TORCH_LIBRARY_IMPL(aten, PrivateUse1, m) {
 }
 
 namespace aipu {
-  class Context final {
-    public:
-      aipu_ctx_handle_t* process_ctx = nullptr;
-      std::mutex inst_lock;
-      Context() {
-        if (process_ctx == nullptr) {
-          std::lock_guard<std::mutex> lock(inst_lock);
-          if (process_ctx == nullptr) {
-            aipu_status_t status = aipu_init_context(&process_ctx);
-            if (status != AIPU_STATUS_SUCCESS) {
-              //
-            }
-          }
-        }
-      };
-      ~Context() {
-        if (process_ctx != nullptr) {
-          std::lock_guard<std::mutex> lock(inst_lock);
-          if (process_ctx != nullptr) {
-            aipu_status_t status = aipu_deinit_context(process_ctx);
-            if (status != AIPU_STATUS_SUCCESS) {
-              //
-            }
-            std::cerr << "deinit context" << std::endl;
-            process_ctx = nullptr;
-          }
-        }
-      };
-  };
 
-  Context* context() {
-    static const std::unique_ptr<Context> context([]() -> Context* {
-      try {
-        return new Context();
-      } catch (...) {
-      }
-      return nullptr;
-    }());
-
-    return context.get();
-  }
-
-bool is_avialable() {
+bool is_available() {
   return context() != nullptr;
 }
 
 
 int device_count() {
-  return is_avialable()? 1  : 0;
+  return is_available()? 1  : 0;
 }
 
 
