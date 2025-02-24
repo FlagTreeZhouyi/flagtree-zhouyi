@@ -1,3 +1,6 @@
+#
+# This file has been modified by Arm China team.
+#
 cmake_minimum_required(VERSION 3.18)
 
 if(POLICY CMP0116)

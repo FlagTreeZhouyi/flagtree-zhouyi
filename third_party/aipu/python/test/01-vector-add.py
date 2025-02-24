@@ -77,6 +77,38 @@ def add(x: torch.Tensor, y: torch.Tensor):
     return output
 
 
+@triton.jit
+def add_simple_kernel(x_ptr,  # *Pointer* to first input vector.
+               y_ptr,  # *Pointer* to second input vector.
+               output_ptr,  # *Pointer* to output vector.
+               n_elements,  # Size of the vector.
+               BLOCK_SIZE: tl.constexpr,  # Number of elements each program should process.
+               # NOTE: `constexpr` so it can be used as a shape value.
+               ):
+    x = tl.load(x_ptr)
+    y = tl.load(y_ptr)
+    output = x + y
+    # Write x + y back to DRAM.
+    tl.store(output_ptr, output)
+
+
+def add_simple(x: torch.Tensor, y: torch.Tensor):
+    # We need to preallocate the output.
+    output = torch.empty_like(x)
+    n_elements = output.numel()
+    # The SPMD launch grid denotes the number of kernel instances that run in parallel.
+    # It is analogous to CUDA launch grids. It can be either Tuple[int], or Callable(metaparameters) -> Tuple[int].
+    # In this case, we use a 1D grid where the size is the number of blocks:
+    grid = lambda meta: (triton.cdiv(n_elements, meta['BLOCK_SIZE']), )
+    # NOTE:
+    #  - Each torch.tensor object is implicitly converted into a pointer to its first element.
+    #  - `triton.jit`'ed functions can be indexed with a launch grid to obtain a callable GPU kernel.
+    #  - Don't forget to pass meta-parameters as keywords arguments.
+    add_simple_kernel[grid](x[0], y[0], output[0], n_elements, BLOCK_SIZE=1024)
+    # We return a handle to z but, since `torch.cuda.synchronize()` hasn't been called, the kernel is still
+    # running asynchronously at this point.
+    return output
+
 # %%
 # We can now use the above function to compute the element-wise sum of two `torch.tensor` objects and test its correctness:
 
