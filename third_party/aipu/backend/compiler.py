@@ -1,5 +1,6 @@
+from triton.backends.aipu.codegen import codegenAIPU
 from triton.backends.compiler import BaseBackend, GPUTarget
-from triton._C.libtriton import ir, aipu
+from triton._C.libtriton import ir, aipu, passes
 
 from dataclasses import dataclass
 import functools
@@ -63,12 +64,37 @@ class AIPUBackend(BaseBackend):
     def make_ttir(mod, metadata, opt):
         pm = ir.pass_manager(mod.context)
         pm.enable_debug()
+        passes.common.add_inliner(pm)
+        passes.ttir.add_rewrite_tensor_pointer(pm)
+        passes.common.add_canonicalizer(pm)
+        passes.ttir.add_combine(pm)
+        passes.ttir.add_reorder_broadcast(pm)
+        passes.common.add_cse(pm)
+        passes.common.add_licm(pm)
+        passes.common.add_symbol_dce(pm)
+        passes.ttir.add_loop_unroll(pm)
+        pm.run(mod)
+        return mod
+
+    @staticmethod
+    def make_linalg(mod, metadata, opt):
+        pm = ir.pass_manager(mod.context)
+        pm.enable_debug()
         # add pass here
+        aipu.passes.convert.add_triton_to_linalg_pipeline(pm)
         pm.run(mod)
         return mod
 
     @staticmethod
     def make_aipubin(mod, metadata, opt):
+        pm = ir.pass_manager(mod.context)
+        pm.enable_debug()
+        # add pass here
+        aipu.passes.convert.add_one_shot_bufferize(pm)
+        aipu.passes.convert.add_linalg_to_loops(pm)
+        pm.run(mod)
+        codegenAIPU(mod)
+
         metadata["name"] = "vector_add"
         metadata["shared"] = 0
         file_path = '/project/ai/scratch01/arozha01/share/aipu.bin'
@@ -80,6 +106,7 @@ class AIPUBackend(BaseBackend):
 
     def add_stages(self, stages, options):
         stages["ttir"] = lambda src, metadata: self.make_ttir(src, metadata, options)
+        stages["linalg"] = lambda src, metadata: self.make_linalg(src, metadata, options)
         stages["bin"] = lambda src, metadata: self.make_aipubin(src, metadata, options)
 
     @functools.lru_cache()

@@ -1,3 +1,6 @@
+/*
+ * This file has been modified by Arm China team.
+ */
 #include <optional>
 #include <pybind11/functional.h>
 #include <pybind11/pybind11.h>
@@ -405,7 +408,17 @@ void init_triton_ir(py::module &&m) {
       .def("get_parent_region", &Region::getParentRegion, ret::reference)
       .def("size", [](Region &self) { return self.getBlocks().size(); })
       .def("empty", &Region::empty)
-      .def("id", [](Region &self) { return (uint64_t)&self; });
+      .def("id", [](Region &self) { return (uint64_t)&self; })
+      .def("get_block", [](Region &self, int idx) -> mlir::Block & {
+        int cnt = 0;
+        for (auto &block : self.getBlocks()) {
+          if (cnt == idx) {
+            return block;
+          }
+          cnt++;
+        }
+        return self.back();
+      }, ret::reference);
 
   py::class_<Block>(m, "block", py::module_local())
       .def("arg",
@@ -572,6 +585,13 @@ void init_triton_ir(py::module &&m) {
              if (!ret)
                return py::none();
              return py::str(ret.getValue().str());
+           })
+      .def("get_int_attr",
+           [](Operation &self, const std::string &name) -> py::object {
+             auto ret = self.getAttrOfType<IntegerAttr>(name);
+             if (!ret)
+               return py::none();
+             return py::int_(ret.getInt());
            });
 
   // dynamic_attr is used to transfer ownership of the MLIR context to the
@@ -665,7 +685,17 @@ void init_triton_ir(py::module &&m) {
       .def("walk",
            [](ModuleOp &self, const std::function<void(Operation *)> &fn) {
              self.walk(fn);
+           })
+      .def("generic_walk",
+           [](ModuleOp &self, const std::function<void(Operation *, const WalkStage &)> &fn) {
+             self.walk(fn);
            });
+
+  py::class_<WalkStage>(m, "WalkStage", py::module_local())
+      .def("is_before_all_regions",
+           [](WalkStage &self) {return py::bool_(self.isBeforeAllRegions()); })
+      .def("is_after_all_regions",
+           [](WalkStage &self) {return py::bool_(self.isAfterAllRegions()); });
 
   m.def("make_attr", [](const std::vector<int> &values, MLIRContext &context) {
     return mlir::cast<Attribute>(DenseIntElementsAttr::get(
