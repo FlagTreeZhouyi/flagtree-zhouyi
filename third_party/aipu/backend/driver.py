@@ -114,15 +114,15 @@ class AIPUDriver(DriverBase):
         try:
             torch.aipu.is_available()
         except:
+            # TODO(aipu-teams): Remove this path later.
+            os.environ["CXX"] = "/arm/tools/gnu/gcc/9.3.0/rhe7-x86_64/bin/g++"
             current_dir = Path(__file__).resolve().parent
-            # extra_ldflags = [f"-L{path}" for path in os.getenv("LD_LIBRARY_PATH").split(":")]
-            extra_ldflags = ["-L/project/ai/scratch01/arozha01/Workspace/test-driver/Compass_NPU_Driver/Linux/bin/sim/release"]
-            extra_ldflags.append("-Wl,-rpath=/project/ai/scratch01/arozha01/Workspace/test-driver/Compass_NPU_Driver/Linux/bin/sim/release")
+            extra_ldflags = [f"-L{path}" for path in os.getenv("LD_LIBRARY_PATH").split(":")]
             extra_ldflags.append("-laipudrv")
             module = cpp_extension.load(
                 name="aipu",
                 sources=[current_dir / "aipu_torch_dev.cpp"],
-                extra_include_paths=[os.getenv("INCLUDE_PATH", "")],
+                extra_include_paths=[os.getenv("ZHOUYI_LINUX_DRIVER_HOME")  + "/driver/umd/include"],
                 extra_ldflags=extra_ldflags,
                 verbose=True
             )
