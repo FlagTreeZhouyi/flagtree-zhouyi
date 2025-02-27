@@ -1,3 +1,4 @@
+import pickle
 from triton.backends.aipu.codegen import codegenAIPU
 from triton.backends.compiler import BaseBackend, GPUTarget
 from triton._C.libtriton import ir, aipu, passes
@@ -93,16 +94,11 @@ class AIPUBackend(BaseBackend):
         aipu.passes.convert.add_one_shot_bufferize(pm)
         aipu.passes.convert.add_linalg_to_loops(pm)
         pm.run(mod)
-        codegenAIPU(mod)
+        ex = codegenAIPU(mod)
 
-        metadata["name"] = "vector_add"
+        metadata["name"] = ex._func_name
         metadata["shared"] = 0
-        file_path = '/project/ai/scratch01/arozha01/share/aipu.bin'
-        binary_content = ""
-
-        with open(file_path, 'rb') as file:
-            binary_content = file.read()
-        return binary_content
+        return pickle.dumps(ex)
 
     def add_stages(self, stages, options):
         stages["ttir"] = lambda src, metadata: self.make_ttir(src, metadata, options)

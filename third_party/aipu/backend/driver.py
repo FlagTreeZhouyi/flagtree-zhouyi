@@ -1,4 +1,5 @@
 import os
+import pickle
 import subprocess
 import torch
 import numpy as np
@@ -57,29 +58,14 @@ class AIPULauncher(object):
         self.launch = launch_aipu
 
     def __call__(self, gridX, gridY, gridZ, stream, function, *args):
-        # Store aipu.bin
-        aipu_bin = function
-        with open("./tmp/aipu.bin", 'wb') as file:
-            file.write(aipu_bin)
+        ex = pickle.loads(function)
+        args = [arg.numpy() if isinstance(arg, torch.Tensor) else arg for arg in args[4:]]
+        tail_args = [gridX, gridY, gridZ, 0, 0, 0]
+        tec_num = 4
 
-        block_size = 1024
-
-        # Store inputs
-        print(len(args))
-        x, y, output, n = args[-4:]
-        x, y = x.aipu(), y.aipu()
-
-        x_np = x.cpu().numpy()
-        y_np = y.cpu().numpy()
-
-        sim_out = []
-        idx = 0
-        for i in range(gridX):
-            sim_out.append(self.launch(x_np[idx:idx + block_size], y_np[idx:idx + block_size]))
-            idx += block_size
-
-        sim_out = np.concatenate(sim_out)
-        output.copy_(torch.from_numpy(sim_out[:n]))
+        for i in range((gridX + tec_num - 1) // tec_num):
+            tail_args[3] = i
+            ex(*(args + tail_args))
 
 
 class AIPUDriver(DriverBase):
