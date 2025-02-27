@@ -41,6 +41,7 @@ class CodeGenerator():
         self.name_idx = 0
         self.prim_func = None
         self.scope_stack = []
+        self.gridx_var = None
 
     def create_var_name(self):
         var_name = "var_" + str(self.name_idx)
@@ -109,13 +110,16 @@ class CodeGenerator():
     def generate(self):
         self.mod.generic_walk(self.dispatch)
         bm = aipu.tir.BuildManager()
-        ex = bm.build(self.prim_func)
+        return bm.build(self.prim_func)
 
     def gen_memref_reinterpret_cast(self, op):
         result = op.get_result(0)
         arg = self.get_operand(op, 0)
+        offset = 0
+        if op.get_num_operands() == 2:
+            offset = self.get_operand(op, 1)
 
-        buffer = T.Buffer((-1,), data=arg)
+        buffer = T.Buffer((-1,), elem_offset=offset, data=arg)
         self.id_to_var_or_buf[result.id()] = buffer
 
     def gen_memref_load(self, op):
@@ -155,7 +159,7 @@ class CodeGenerator():
         size = self.get_operand(op, 1)
 
         buffer = buffer._buffer if isinstance(buffer, tir.ir_builder.BufferVar) else buffer
-        subview = T.Buffer(size, data=buffer.data)
+        subview = T.Buffer(size, elem_offset=buffer.elem_offset, data=buffer.data)
         self.id_to_var_or_buf[result.id()] = subview
 
     def gen_arith_constant(self, op):
@@ -181,6 +185,16 @@ class CodeGenerator():
         self.ib.emit(T.ret(None))
 
     def gen_func_func(self, op, stage):
+        if stage.is_before_all_regions():
+            block = op.get_region(0).get_block(0)
+            arg_nums = block.get_num_arguments()
+            gridx = block.arg(arg_nums - 3)
+            gridx_var = self.get_or_create_var(gridx)
+            self.gridx_var = gridx_var
+
+            tid = T.Add(T.Mul(gridx_var, S.get_local_size()), S.get_local_id())
+            self.emit_let(tid, gridx)
+
         if stage.is_after_all_regions():
             func_name = op.get_str_attr("sym_name")
             block = op.get_region(0).get_block(0)
@@ -188,9 +202,12 @@ class CodeGenerator():
 
             args = []
             for i in range(arg_nums):
-                arg = block.arg(i)
-                var = self.get_or_create_var(arg)
-                args.append(var)
+                if i == arg_nums - 3:
+                    args.append(self.gridx_var)
+                else:
+                    arg = block.arg(i)
+                    var = self.get_or_create_var(arg)
+                    args.append(var)
 
             self.prim_func = tir.PrimFunc(args, self.ib.get()).with_attr(
                 "global_symbol", func_name
@@ -213,4 +230,4 @@ class CodeGenerator():
 
 def codegenAIPU(mod):
     generator = CodeGenerator(mod)
-    generator.generate()
+    return generator.generate()
