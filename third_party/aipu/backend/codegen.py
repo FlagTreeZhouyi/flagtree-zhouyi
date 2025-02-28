@@ -1,16 +1,18 @@
-from triton._C.libtriton import ir as triton_ir
 from tvm import tir, ir, aipu
 from tvm.script.parser import tir as T
 from tvm.aipu import script as S
 
 
 _TYPE_MAPPING = {"f32": "float32", "i32": "int32", "index": "int32"}
+_CMP_MAPPING = {0: T.EQ, 1: T.NE, 2: T.LT, 3: T.LE, 4: T.GT, 5: T.GE, 6: T.LT, 7: T.LE, 8: T.GT, 9: T.GE}
 
 
-def _get_type(ty):
-    ty = str(ty)
+def _get_type(value):
+    ty = str(value.get_type())
     if ty.startswith("memref"):
         start = ty.find("x")
+        if start == -1:
+            start = ty.find("<")
         end = ty.find(",", start)
         if end == -1:
             end = ty.find(">", start)
@@ -23,11 +25,13 @@ def _get_type(ty):
     raise RuntimeError(f"Cannot parse type {ty}")
 
 
-def _get_shape(ty):
-    ty = str(ty)
+def _get_shape(value):
+    ty = str(value.get_type())
     if ty.startswith("memref"):
         start = ty.find("<")
         end = ty.find("x", start)
+        if end == -1:
+            return [1]
         return [int(ty[start + 1:end])]
 
     raise RuntimeError(f"Cannot parse shape {ty}")
@@ -60,52 +64,105 @@ class CodeGenerator():
         if value.id() in self.id_to_var_or_buf:
             return self.id_to_var_or_buf[value.id()]
 
-        value_type = _get_type(value.get_type())
+        value_type = _get_type(value)
         var = T.Var(self.create_var_name(), value_type)
         self.id_to_var_or_buf[value.id()] = var
         return var
 
+    def for_range(self, begin, end, step, kind="serial"):
+        self.ib._seq_stack.append([])
+
+        loop_var = T.Var(self.create_var_name(), "int32")
+        extent = end if begin == 0 else (end - begin)
+        annotations={"step": step}
+
+        def _exit_cb():
+            if kind == "serial":
+                kind_id = tir.ForKind.SERIAL
+            elif kind == "parallel":
+                kind_id = tir.ForKind.PARALLEL
+            elif kind == "vectorize":
+                kind_id = tir.ForKind.VECTORIZED
+            elif kind == "unroll":
+                kind_id = tir.ForKind.UNROLLED
+            else:
+                raise ValueError("Unknown kind")
+            self.ib.emit(
+                tir.For(
+                    loop_var,
+                    begin,
+                    extent,
+                    kind_id,
+                    self.ib._pop_seq(),
+                    annotations=annotations,
+                )
+            )
+
+        return tir.ir_builder.WithScope(loop_var, _exit_cb)
+
+    def enter_scope(self, scope):
+        assert isinstance(scope, tir.ir_builder.WithScope)
+        self.scope_stack.append(scope)
+        return scope.__enter__()
+
+    def exit_scope(self):
+        self.scope_stack.pop().__exit__(None, None, None)
 
     def dispatch(self, op, stage):
         op_name = op.get_name()
-        # Memref Dialect
-        if op_name == "memref.reinterpret_cast":
-            self.gen_memref_reinterpret_cast(op)
-        if op_name == "memref.load":
-            self.gen_memref_load(op)
-        if op_name == "memref.store":
-            self.gen_memref_store(op)
-        if op_name == "memref.alloc":
-            self.gen_memref_alloc(op)
-        if op_name == "memref.copy":
-            self.gen_memref_copy(op)
-        if op_name == "memref.subview":
-            self.gen_memref_subview(op)
-        # Arith Dialect
-        if op_name == "arith.constant":
-            self.gen_arith_constant(op)
-        if op_name == "arith.index_cast":
-            self.gen_arith_index_cast(op)
-        if op_name in ("arith.addf", "arith.addi"):
-            self.gen_arith_binary(op, T.Add)
-        if op_name in ("arith.subf", "arith.subi"):
-            self.gen_arith_binary(op, T.Sub)
-        if op_name == "arith.muli":
-            self.gen_arith_binary(op, T.Mul)
-        if op_name == "arith.minsi":
-            self.gen_arith_binary(op, T.Min)
-        if op_name == "arith.maxsi":
-            self.gen_arith_binary(op, T.Max)
-        # Func Dialect
-        if op_name == "func.return":
-            self.gen_func_return(op)
-        if op_name == "func.func":
-            self.gen_func_func(op, stage)
-        # Scf Dialect
-        if op_name == "scf.for":
-            self.gen_scf_for(op, stage)
-        if op_name == "scf.yield":
-            pass
+        match op_name:
+            # Memref Dialect
+            case "memref.reinterpret_cast":
+                self.gen_memref_reinterpret_cast(op)
+            case "memref.load":
+                self.gen_memref_load(op)
+            case "memref.store":
+                self.gen_memref_store(op)
+            case "memref.alloc":
+                self.gen_memref_alloc(op)
+            case "memref.copy":
+                self.gen_memref_copy(op)
+            case "memref.subview":
+                self.gen_memref_subview(op)
+            # Arith Dialect
+            case "arith.constant":
+                self.gen_arith_constant(op)
+            case "arith.index_cast":
+                self.gen_arith_index_cast(op)
+            case "arith.addf" | "arith.addi":
+                self.gen_arith_binary(op, T.Add)
+            case "arith.subf" | "arith.subi":
+                self.gen_arith_binary(op, T.Sub)
+            case "arith.muli":
+                self.gen_arith_binary(op, T.Mul)
+            case "arith.minsi":
+                self.gen_arith_binary(op, T.Min)
+            case "arith.maxsi" | "arith.maxnumf":
+                self.gen_arith_binary(op, T.Max)
+            case "arith.divf":
+                self.gen_arith_binary(op, T.Div)
+            case "arith.cmpi":
+                self.gen_arith_binary(op, _CMP_MAPPING[op.get_attr("predicate")])
+            # Math Dialect
+            case "math.exp":
+                self.gen_math_exp(op)
+            # Func Dialect
+            case "func.return":
+                self.gen_func_return(op)
+            case "func.func":
+                self.gen_func_func(op, stage)
+            # Scf Dialect
+            case "scf.for":
+                self.gen_scf_for(op, stage)
+            case "scf.if":
+                self.gen_scf_if(op, stage)
+            case "scf.yield":
+                pass
+            # Others
+            case "builtin.module":
+                pass
+            case _:
+                raise RuntimeError(f"Unsupport op {op_name}.")
 
     def generate(self):
         self.mod.generic_walk(self.dispatch)
@@ -125,22 +182,25 @@ class CodeGenerator():
     def gen_memref_load(self, op):
         result = op.get_result(0)
         buffer = self.get_operand(op, 0)
-        index = self.get_operand(op, 1)
+        index = 0
+        if op.get_num_operands() == 2:
+            index = self.get_operand(op, 1)
 
         self.emit_let(T.BufferLoad(buffer, [index]), result)
 
     def gen_memref_store(self, op):
         value = self.get_operand(op, 0)
         buffer = self.get_operand(op, 1)
-        index = self.get_operand(op, 2)
+        index = 0
+        if op.get_num_operands() == 3:
+            index = self.get_operand(op, 2)
 
         self.ib.emit(tir.BufferStore(buffer, value, [index]))
 
     def gen_memref_alloc(self, op):
         result = op.get_result(0)
-        result_type = result.get_type()
-        dtype = _get_type(result_type).element_type.dtype
-        shape = _get_shape(result_type)
+        dtype = _get_type(result).element_type.dtype
+        shape = _get_shape(result)
 
         buf = self.ib.allocate(dtype, shape, scope="lsram")
         self.id_to_var_or_buf[result.id()] = buf
@@ -164,9 +224,10 @@ class CodeGenerator():
 
     def gen_arith_constant(self, op):
         result = op.get_result(0)
-        value = op.get_int_attr("value")
+        dtype = _get_type(result)
+        value = op.get_attr("value")
 
-        self.emit_let(T.int32(value), result)
+        self.emit_let(tir.const(value, dtype), result)
 
     def gen_arith_index_cast(self, op):
         result = op.get_result(0)
@@ -180,6 +241,12 @@ class CodeGenerator():
         arg1 = self.get_operand(op, 1)
 
         self.emit_let(method(arg0, arg1), result)
+
+    def gen_math_exp(self, op):
+        result = op.get_result(0)
+        arg0 = self.get_operand(op, 0)
+
+        self.emit_let(S.exp(arg0), result)
 
     def gen_func_return(self, op):
         self.ib.emit(T.ret(None))
@@ -196,7 +263,7 @@ class CodeGenerator():
             self.emit_let(tid, gridx)
 
         if stage.is_after_all_regions():
-            func_name = op.get_str_attr("sym_name")
+            func_name = op.get_attr("sym_name")
             block = op.get_region(0).get_block(0)
             arg_nums = block.get_num_arguments()
 
@@ -217,15 +284,33 @@ class CodeGenerator():
         if stage.is_before_all_regions():
             begin = self.get_operand(op, 0)
             end = self.get_operand(op, 1)
-            block = op.get_region(0).get_block(0)
-            loop_var = block.arg(0)
+            step = self.get_operand(op, 2)
 
-            for_range = self.ib.for_range(begin, end)
-            self.scope_stack.append(for_range)
-            self.id_to_var_or_buf[loop_var.id()] = for_range.__enter__()
+            block = op.get_region(0).get_block(0)
+            loop_iter = block.arg(0)
+
+            for_range = self.for_range(begin, end, step)
+            loop_var = self.enter_scope(for_range)
+            self.id_to_var_or_buf[loop_iter.id()] = loop_var
 
         if stage.is_after_all_regions():
-            self.scope_stack.pop().__exit__(None, None, None)
+            self.exit_scope()
+
+    def gen_scf_if(self, op, stage):
+        # If branch
+        if stage.is_before_all_regions():
+            cond = self.get_operand(op, 0)
+
+            if_scope = self.ib.if_scope(cond)
+            self.enter_scope(if_scope)
+        # Else branch
+        if stage.is_after_region(0):
+            self.exit_scope()
+            else_scope = self.ib.else_scope()
+            self.enter_scope(else_scope)
+        # Finish
+        if stage.is_after_all_regions():
+            self.exit_scope()
 
 
 def codegenAIPU(mod):

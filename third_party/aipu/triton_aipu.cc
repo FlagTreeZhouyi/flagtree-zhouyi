@@ -16,6 +16,7 @@
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/Func/Extensions/AllExtensions.h"
 #include "mlir/Dialect/Bufferization/Transforms/FuncBufferizableOpInterfaceImpl.h"
+#include "mlir/Dialect/SCF/Transforms/BufferizableOpInterfaceImpl.h"
 
 #include <pybind11/pybind11.h>
 #include <pybind11/functional.h>
@@ -55,6 +56,7 @@ void init_triton_aipu(py::module &&m) {
     bufferization::func_ext::registerBufferizableOpInterfaceExternalModels(
       registry);
     func::registerAllExtensions(registry);
+    scf::registerBufferizableOpInterfaceExternalModels(registry);
     context.appendDialectRegistry(registry);
     context.loadAllAvailableDialects();
   });
