@@ -20,6 +20,7 @@ class AIPUOptions:
     backend_name: str = "aipu"
     debug: bool = False
     sanitize_overflow: bool = True
+    num_warps: int = 4
 
     def hash(self):
         hash_dict = dict(self.__dict__)
@@ -97,7 +98,7 @@ class AIPUBackend(BaseBackend):
         ex = codegenAIPU(mod)
 
         metadata["name"] = ex._func_name
-        metadata["shared"] = 0
+        metadata["shared"] = 1
         return pickle.dumps(ex)
 
     def add_stages(self, stages, options):

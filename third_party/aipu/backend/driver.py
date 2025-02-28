@@ -14,7 +14,7 @@ from triton.backends.driver import DriverBase
 
 
 def load_binary(name, kernel, shared, device):
-    return None, kernel, 0, 0
+    return None, kernel, 1, 0
 
 
 class AIPUUtils(object):
@@ -26,7 +26,13 @@ class AIPUUtils(object):
 
     def __init__(self):
         self.load_binary = load_binary
-        self.get_device_properties = lambda device: {"max_shared_mem": 256 * 1024}
+        properties_dict = {
+            "max_shared_mem": 256 * 1024,
+            "multiprocessor_count": 4,
+            "max_num_regs": 32,
+            "warpSize": 4
+        }
+        self.get_device_properties = lambda device: properties_dict
 
 
 # ------------------------

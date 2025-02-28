@@ -14,6 +14,7 @@ if(TRITON_BUILD_PYTHON_MODULE)
     MLIRArithTransforms
     MLIRFuncAllExtensions
     MLIRAffineToStandard
+    MLIRSCFTransforms
   )
   target_include_directories(TritonAIPU PRIVATE "${TRITON_SHARED_DIR}/include")
 endif()
