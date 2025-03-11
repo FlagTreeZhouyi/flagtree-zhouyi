@@ -92,10 +92,11 @@ class AIPUBackend(BaseBackend):
         pm.enable_debug()
         # add pass here
         aipu.passes.convert.add_one_shot_bufferize(pm)
-        aipu.passes.convert.add_linalg_to_loops(pm)
+        aipu.passes.convert.add_linalg_to_affine_loops(pm)
+        aipu.passes.convert.add_affine_vectorize(pm, 8)
+        aipu.passes.convert.add_lower_affine(pm)
         pm.run(mod)
         ex = codegenAIPU(mod)
-
         metadata["name"] = ex._func_name
         metadata["shared"] = 1
         return pickle.dumps(ex)

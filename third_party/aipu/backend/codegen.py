@@ -32,30 +32,39 @@ class WalkStage:
         return self.next_region
 
 
+def _convert_scalar_type(type):
+    """convert from mlir_type to tvm_type_str"""
+    if isinstance(type, mlir_ir.IndexType):
+        return "int32"
+    if isinstance(type, mlir_ir.IntegerType):
+        sign_str = "u" if type.is_unsigned else ""
+        width = min(32, type.width)
+        return f"{sign_str}int{width}"
+    if isinstance(type, mlir_ir.FloatType):
+        return f"float{type.width}"
+    raise RuntimeError(f"not scalar type {type}")
+
+
+def _convert_vector_type(type):
+    """convert from mlir_type to tvm_type_str"""
+    if isinstance(type, mlir_ir.VectorType):
+        assert type.rank == 1
+        e_dtype = _convert_scalar_type(type.element_type)
+        vtype = f"{e_dtype}x{type.shape[0]}"
+        return vtype
+    raise RuntimeError(f"not scalar type {type}")
+
+
 def _get_type(value):
     ty = value.type
 
-    def _get_scalar_type(type):
-        if isinstance(type, mlir_ir.IndexType):
-            return "int32"
-        if isinstance(type, mlir_ir.IntegerType):
-            sign_str = "u" if type.is_unsigned else ""
-            width = min(32, type.width)
-            return f"{sign_str}int{width}"
-        if isinstance(type, mlir_ir.FloatType):
-            return f"float{type.width}"
-        raise RuntimeError(f"not scalar type {type}")
-
     if isinstance(ty, mlir_ir.IndexType | mlir_ir.IntegerType | mlir_ir.FloatType):
-        return _get_scalar_type(ty)
-
+        return _convert_scalar_type(ty)
     elif isinstance(ty, mlir_ir.MemRefType | mlir_ir.UnrankedMemRefType):
-        e_dtype = _get_scalar_type(ty.element_type)
+        e_dtype = _convert_scalar_type(ty.element_type)
         return ir.PointerType(ir.PrimType(e_dtype))
     elif isinstance(ty, mlir_ir.VectorType):
-        assert ty.rand == 1
-        e_dtype = _get_scalar_type(ty.element_type)
-        vtype = f"{e_dtype}x{ty.shape[0]}"
+        vtype = _convert_vector_type(ty)
         return ir.PointerType(ir.PrimType(vtype))
 
     raise RuntimeError(f"Cannot parse type {ty}")
@@ -199,6 +208,13 @@ class CodeGenerator():
                 self.gen_scf_if(op, stage)
             case "scf.yield":
                 pass
+            # Vector Dialect
+            case "vector.transfer_read":
+                self.gen_vload(op)
+            case "vector.transfer_write":
+                self.gen_vstore(op)
+            case "vector.broadcast":
+                self.gen_vbcast(op)
             # Others
             case "builtin.module":
                 pass
@@ -264,11 +280,20 @@ class CodeGenerator():
         self.mlir_to_tir_mapping[result] = subview
 
     def gen_arith_constant(self, op):
-        result = op.result
-        dtype = _get_type(result)
-        value = op.literal_value
 
-        self.emit_let(tir.const(value, dtype), result)
+        def _create_const_expr(op):
+            ty = op.result.type
+            # scalar
+            if isinstance(ty, mlir_ir.IndexType | mlir_ir.IntegerType | mlir_ir.FloatType):
+                return tir.const(op.literal_value, _get_type(op.result))
+            # vector
+            if isinstance(ty, mlir_ir.VectorType):
+                if isinstance(ty.element_type, mlir_ir.F32Type):
+                    return S.cast(list(mlir_ir.DenseFPElementsAttr(op.value)), _convert_vector_type(ty))
+            raise RuntimeError(f"Cannot parse constant {op}")
+
+        expr = _create_const_expr(op)
+        self.emit_let(expr, op.result)
 
     def gen_arith_index_cast(self, op):
         result = op.result
@@ -356,6 +381,30 @@ class CodeGenerator():
         # Finish
         if stage.is_after_all_regions():
             self.exit_scope()
+
+    def gen_vload(self, op):
+        result = op.result
+        buffer = self.get_operand(op, 0)
+        index = 0
+        if len(op.operands) >= 2:
+            index = self.get_operand(op, 1)
+
+        self.emit_let(S.vload(buffer.addr_of(index)), result)
+
+    def gen_vstore(self, op):
+        value = self.get_operand(op, 0)
+        buffer = self.get_operand(op, 1)
+        index = 0
+        if len(op.operands) >= 3:
+            index = self.get_operand(op, 2)
+
+        self.ib.emit(S.vstore(value, buffer.addr_of(index)))
+
+    def gen_vbcast(self, op):
+        result = op.result
+        value = self.get_operand(op, 0)
+        dtype = result.type
+        self.emit_let(S.vbcast(S.cast(value, value.dtype), lanes=dtype.shape[0]), result)
 
 
 class AIPUModule:
