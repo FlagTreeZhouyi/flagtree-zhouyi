@@ -11,4 +11,5 @@ target_link_libraries(TritonAIPU PRIVATE
     MLIRFuncAllExtensions
     MLIRAffineToStandard
     MLIRSCFTransforms
+    MLIRAffineTransforms
 )
