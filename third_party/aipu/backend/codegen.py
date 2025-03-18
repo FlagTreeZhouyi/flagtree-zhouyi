@@ -3,7 +3,7 @@ from tvm.script.parser import tir as T
 from tvm.aipu import script as S
 
 
-_TYPE_MAPPING = {"f32": "float32", "i32": "int32", "index": "int32"}
+_TYPE_MAPPING = {"f32": "float32", "f16": "float16", "i32": "int32", "index": "int32"}
 _CMP_MAPPING = {0: T.EQ, 1: T.NE, 2: T.LT, 3: T.LE, 4: T.GT, 5: T.GE, 6: T.LT, 7: T.LE, 8: T.GT, 9: T.GE}
 
 
@@ -133,7 +133,7 @@ class CodeGenerator():
                 self.gen_arith_binary(op, T.Add)
             case "arith.subf" | "arith.subi":
                 self.gen_arith_binary(op, T.Sub)
-            case "arith.muli":
+            case "arith.muli" | "arith.mulf":
                 self.gen_arith_binary(op, T.Mul)
             case "arith.minsi":
                 self.gen_arith_binary(op, T.Min)
@@ -143,6 +143,8 @@ class CodeGenerator():
                 self.gen_arith_binary(op, T.Div)
             case "arith.cmpi":
                 self.gen_arith_binary(op, _CMP_MAPPING[op.get_attr("predicate")])
+            case "arith.sitofp" | "arith.extf" | "arith.truncf":
+                self.gen_arith_cast(op)
             # Math Dialect
             case "math.exp":
                 self.gen_math_exp(op)
@@ -172,11 +174,12 @@ class CodeGenerator():
     def gen_memref_reinterpret_cast(self, op):
         result = op.get_result(0)
         arg = self.get_operand(op, 0)
+        dtype = _get_type(result).element_type.dtype
         offset = 0
         if op.get_num_operands() == 2:
             offset = self.get_operand(op, 1)
 
-        buffer = T.Buffer((-1,), elem_offset=offset, data=arg)
+        buffer = T.Buffer((-1,), elem_offset=offset, data=arg, dtype=dtype)
         self.id_to_var_or_buf[result.id()] = buffer
 
     def gen_memref_load(self, op):
@@ -219,7 +222,12 @@ class CodeGenerator():
         size = self.get_operand(op, 1)
 
         buffer = buffer._buffer if isinstance(buffer, tir.ir_builder.BufferVar) else buffer
-        subview = T.Buffer(size, elem_offset=buffer.elem_offset, data=buffer.data)
+        subview = T.Buffer(
+            size,
+            elem_offset=buffer.elem_offset,
+            data=buffer.data,
+            dtype=buffer.dtype
+        )
         self.id_to_var_or_buf[result.id()] = subview
 
     def gen_arith_constant(self, op):
@@ -241,6 +249,12 @@ class CodeGenerator():
         arg1 = self.get_operand(op, 1)
 
         self.emit_let(method(arg0, arg1), result)
+
+    def gen_arith_cast(self, op):
+        result = op.get_result(0)
+        arg0 = self.get_operand(op, 0)
+
+        self.emit_let(S.cast(arg0, _get_type(result)), result)
 
     def gen_math_exp(self, op):
         result = op.get_result(0)
