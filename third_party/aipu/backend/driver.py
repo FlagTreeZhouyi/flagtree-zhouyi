@@ -40,38 +40,41 @@ class AIPUUtils(object):
 # ------------------------
 
 
-def launch_aipu(input0, input1):
-    os.chdir("./tmp")
-
-    input0.tofile("input0.bin")
-    input1.tofile("input1.bin")
-
-    command = ['aipudumper', "aipu.bin", '-i', 'input0.bin,input1.bin']
-    subprocess.run(command, capture_output=True, text=True)
-
-    command = ['aipu_simulator_x2', 'temp.cfg']
-    subprocess.run(command, capture_output=True, text=True)
-
-    sim_out = np.fromfile("./output.bin", np.float32)
-    os.chdir("..")
-
-    return sim_out
-
-
 class AIPULauncher(object):
 
     def __init__(self, src, metadata):
-        self.launch = launch_aipu
+        ...
 
     def __call__(self, gridX, gridY, gridZ, stream, function, *args):
+        try:
+            from flag_gems.utils.tensor_wrapper import StridedBuffer
+        except:
+            StridedBuffer = torch.Tensor
+
         ex = pickle.loads(function)
-        args = [arg.numpy() if isinstance(arg, torch.Tensor) else arg for arg in args[4:]]
+        np_args = []
+        cpu_to_aipu = {}
+        for arg in args[4:]:
+            if isinstance(arg, torch.Tensor):
+                arg_cpu = arg.cpu()
+                np_args.append(arg_cpu.numpy())
+                cpu_to_aipu[arg_cpu] = arg
+            elif isinstance(arg, StridedBuffer):
+                arg_cpu = arg._base.cpu()
+                np_args.append(arg_cpu.numpy())
+                cpu_to_aipu[arg_cpu] = arg._base
+            else:
+                np_args.append(arg)
+
         tail_args = [gridX, gridY, gridZ, 0, 0, 0]
         tec_num = 4
 
         for i in range((gridX + tec_num - 1) // tec_num):
             tail_args[3] = i
-            ex(*(args + tail_args))
+            ex(*(np_args + tail_args))
+
+        for arg_cpu, arg_aipu in cpu_to_aipu.items():
+            arg_aipu.copy_(arg_cpu)
 
 
 class AIPUDriver(DriverBase):

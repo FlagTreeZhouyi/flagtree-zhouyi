@@ -11,6 +11,7 @@
 #include <ATen/EmptyTensor.h>
 #include <ATen/native/DispatchStub.h>
 #include <ATen/InferSize.h>
+#include <ATen/native/cpu/DistributionTemplates.h>
 
 #include <standard_api.h>
 #include <internal/internal_api.h>
@@ -176,12 +177,48 @@ at::Tensor aipu_copy_from(const at::Tensor& self, const at::Tensor& dst, bool no
   if (StrStartsWith(self.device().str(), "aipu")) {
     kind = AIPU_MEMCPY_DEVICE_TO_HOST;
   }
-  aipu_memcpy(
-    AIPUAllocator::aipu_ctx_,
+
+  auto aipu_ctx_ = AIPUAllocator::aipu_ctx_;
+  auto status = aipu_memcpy(
+    aipu_ctx_,
     dst.data_ptr(),
     self.data_ptr(),
     self.nbytes(),
     kind);
+  AIPU_DRIVER_HANDLE_ERROR(status);
+  return self;
+}
+
+template <template<typename> class RND>
+at::Tensor& random_kernel(
+  at::Tensor& self,
+  double cond1,
+  double cond2,
+  c10::optional<at::Generator> gen
+) {
+  at::CPUGeneratorImpl* generator = at::get_generator_or_default<at::CPUGeneratorImpl>(
+    gen, at::detail::getDefaultCPUGenerator()
+  );
+  int64_t numel = self.numel();
+
+  auto aipu_ctx_ = AIPUAllocator::aipu_ctx_;
+  char* data_ptr = nullptr;
+  auto status = aipu_get_va(
+    aipu_ctx_,
+    self.data_ptr(),
+    &data_ptr);
+  AIPU_DRIVER_HANDLE_ERROR(status);
+
+  AT_DISPATCH_FLOATING_TYPES_AND_HALF(
+    self.scalar_type(), "random_kernel_aipu", [&]() {
+      RND<double> distribution(cond1, cond2);
+
+      auto data = reinterpret_cast<scalar_t*>(data_ptr);
+      for (int i = 0; i < numel; ++i) {
+        data[i] = static_cast<scalar_t>(distribution(generator));
+      }
+    }
+  );
   return self;
 }
 
@@ -190,7 +227,8 @@ TORCH_LIBRARY_IMPL(aten, PrivateUse1, m) {
   m.impl("empty_strided", &custom_empty_strided);
   m.impl("as_strided", at::native::as_strided_tensorimpl);
   m.impl("aten::view", &aipu_view);
-  m.impl("aten::uniform_", at::native::uniform_);
+  m.impl("aten::uniform_", &random_kernel<at::uniform_real_distribution>);
+  m.impl("aten::normal_", &random_kernel<at::normal_distribution>);
   m.impl("aten::_copy_from", &aipu_copy_from);
 }
 

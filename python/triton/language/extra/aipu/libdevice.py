@@ -1,0 +1,6 @@
+def clz(arg0):
+    ...
+
+
+def fma(arg0, arg1, arg2):
+    ...

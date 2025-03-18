@@ -151,7 +151,7 @@ def softmax(x):
         n_rows,
         n_cols,
     )
-    return y
+    return y.cpu()
 
 
 # %%
@@ -163,7 +163,7 @@ def softmax(x):
 # This will allow us to verify that our padding mechanism works.
 
 torch.manual_seed(0)
-x = torch.randn(128, 781)
+x = torch.randn(128, 781, device=DEVICE)
 y_triton = softmax(x)
-y_torch = torch.softmax(x, axis=1)
+y_torch = torch.softmax(x.cpu(), axis=1)
 assert torch.allclose(y_triton, y_torch), (y_triton, y_torch)

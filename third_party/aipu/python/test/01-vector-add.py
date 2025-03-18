@@ -74,7 +74,7 @@ def add(x: torch.Tensor, y: torch.Tensor):
     add_kernel[grid](x, y, output, n_elements, BLOCK_SIZE=1024)
     # We return a handle to z but, since `torch.cuda.synchronize()` hasn't been called, the kernel is still
     # running asynchronously at this point.
-    return output
+    return output.cpu()
 
 
 @triton.jit
@@ -107,16 +107,16 @@ def add_simple(x: torch.Tensor, y: torch.Tensor):
     add_simple_kernel[grid](x[0], y[0], output[0], n_elements, BLOCK_SIZE=1024)
     # We return a handle to z but, since `torch.cuda.synchronize()` hasn't been called, the kernel is still
     # running asynchronously at this point.
-    return output
+    return output.cpu()
 
 # %%
 # We can now use the above function to compute the element-wise sum of two `torch.tensor` objects and test its correctness:
 
 torch.manual_seed(0)
 size = 4432
-x = torch.rand(size)
-y = torch.rand(size)
-output_torch = x + y
+x = torch.rand(size, device=DEVICE)
+y = torch.rand(size, device=DEVICE)
+output_torch = x.cpu() + y.cpu()
 
 output_triton = add(x, y)
 print(output_torch)
