@@ -1,38 +1,72 @@
 from tvm import tir, ir, aipu
 from tvm.script.parser import tir as T
 from tvm.aipu import script as S
+from mlir import ir as mlir_ir
+from mlir.dialects import func
 
 
-_TYPE_MAPPING = {"f32": "float32", "f16": "float16", "i32": "int32", "i64": "int32", "index": "int32"}
 _CMP_MAPPING = {0: T.EQ, 1: T.NE, 2: T.LT, 3: T.LE, 4: T.GT, 5: T.GE, 6: T.LT, 7: T.LE, 8: T.GT, 9: T.GE}
 
 
-def _get_type(value):
-    ty = str(value.get_type())
-    if ty.startswith("memref"):
-        start = ty.find("x")
-        if start == -1:
-            start = ty.find("<")
-        end = ty.find(",", start)
-        if end == -1:
-            end = ty.find(">", start)
-        dtype = _TYPE_MAPPING[ty[start + 1:end]]
-        return ir.PointerType(ir.PrimType(dtype))
+class WalkStage:
+    def __init__(self, op):
+        self.num_regions = len(op.regions)
+        self.next_region = 0
 
-    if ty in _TYPE_MAPPING:
-        return _TYPE_MAPPING[ty]
+    def is_before_all_regions(self):
+        return self.next_region == 0
+
+    def is_before_region(self, region):
+        return self.next_region == region
+
+    def is_after_region(self, region):
+        return self.next_region == region + 1
+
+    def is_after_all_regions(self):
+        return self.next_region == self.num_regions
+
+    def advance(self):
+        self.next_region += 1
+
+    def get_next_region(self):
+        return self.next_region
+
+
+def _get_type(value):
+    ty = value.type
+
+    def _get_scalar_type(type):
+        if isinstance (type, mlir_ir.IndexType):
+            return "int32"
+        if isinstance (type, mlir_ir.IntegerType):
+            sign_str = "u" if type.is_unsigned else ""
+            width = min(32, type.width)
+            return f"{sign_str}int{width}"
+        if isinstance(type, mlir_ir.FloatType):
+            return f"float{type.width}"
+        raise RuntimeError(f"not scalar type {type}")
+
+    if isinstance(ty, mlir_ir.IndexType | mlir_ir.IntegerType | mlir_ir.FloatType):
+        return _get_scalar_type(ty)
+
+    elif isinstance(ty, mlir_ir.MemRefType | mlir_ir.UnrankedMemRefType):
+        e_dtype = _get_scalar_type(ty.element_type)
+        return ir.PointerType(ir.PrimType(e_dtype))
+    elif isinstance(ty, mlir_ir.VectorType):
+        assert ty.rand==1
+        e_dtype = _get_scalar_type(ty.element_type)
+        vtype = f"{e_dtype}x{ty.shape[0]}"
+        return ir.PointerType(ir.PrimType(vtype))
 
     raise RuntimeError(f"Cannot parse type {ty}")
 
 
 def _get_shape(value):
-    ty = str(value.get_type())
-    if ty.startswith("memref"):
-        start = ty.find("<")
-        end = ty.find("x", start)
-        if end == -1:
-            return [1]
-        return [int(ty[start + 1:end])]
+    ty = value.type
+    if isinstance(ty, mlir_ir.ShapedType):
+        if ty.rank > 0:
+            return ty.shape
+        return [1]
 
     raise RuntimeError(f"Cannot parse shape {ty}")
 
@@ -41,7 +75,9 @@ class CodeGenerator():
     def __init__(self, mod) -> None:
         self.mod = mod
         self.ib = tir.ir_builder.create()
-        self.id_to_var_or_buf = {}
+        # Dictionary to map MLIR values to corresponding TVM TIR variables or buffers.
+        # Keys are MLIR values, and values are TVM TIR variables or buffers.
+        self.mlir_to_tir_mapping = {}
         self.name_idx = 0
         self.prim_func = None
         self.scope_stack = []
@@ -55,18 +91,18 @@ class CodeGenerator():
     def emit_let(self, value, related_value):
         var_name = self.create_var_name()
         let_var = self.ib.let(var_name, value)
-        self.id_to_var_or_buf[related_value.id()] = let_var
+        self.mlir_to_tir_mapping[related_value] = let_var
 
     def get_operand(self, op, idx):
-        return self.get_or_create_var(op.get_operand(idx))
+        return self.get_or_create_var(op.operands[idx])
 
     def get_or_create_var(self, value):
-        if value.id() in self.id_to_var_or_buf:
-            return self.id_to_var_or_buf[value.id()]
+        if value in self.mlir_to_tir_mapping:
+            return self.mlir_to_tir_mapping[value]
 
         value_type = _get_type(value)
         var = T.Var(self.create_var_name(), value_type)
-        self.id_to_var_or_buf[value.id()] = var
+        self.mlir_to_tir_mapping[value] = var
         return var
 
     def for_range(self, begin, end, step, kind="serial"):
@@ -109,7 +145,7 @@ class CodeGenerator():
         self.scope_stack.pop().__exit__(None, None, None)
 
     def dispatch(self, op, stage):
-        op_name = op.get_name()
+        op_name = "func.func" if isinstance(op, func.FuncOp) else op.name
         match op_name:
             # Memref Dialect
             case "memref.reinterpret_cast":
@@ -142,7 +178,7 @@ class CodeGenerator():
             case "arith.divf":
                 self.gen_arith_binary(op, T.Div)
             case "arith.cmpi":
-                self.gen_arith_binary(op, _CMP_MAPPING[op.get_attr("predicate")])
+                self.gen_arith_binary(op, _CMP_MAPPING[op.predicate.value])
             case "arith.sitofp" | "arith.extf" | "arith.truncf" | "arith.extsi" | "arith.trunci":
                 self.gen_arith_cast(op)
             # Math Dialect
@@ -167,26 +203,26 @@ class CodeGenerator():
                 raise RuntimeError(f"Unsupport op {op_name}.")
 
     def generate(self):
-        self.mod.generic_walk(self.dispatch)
+        self.mod.walk(self.dispatch)
         bm = aipu.tir.BuildManager()
         return bm.build(self.prim_func)
 
     def gen_memref_reinterpret_cast(self, op):
-        result = op.get_result(0)
+        result = op.result
         arg = self.get_operand(op, 0)
         dtype = _get_type(result).element_type.dtype
         offset = 0
-        if op.get_num_operands() == 2:
+        if len(op.operands) == 2:
             offset = self.get_operand(op, 1)
 
         buffer = T.Buffer((-1,), elem_offset=offset, data=arg, dtype=dtype)
-        self.id_to_var_or_buf[result.id()] = buffer
+        self.mlir_to_tir_mapping[result] = buffer
 
     def gen_memref_load(self, op):
-        result = op.get_result(0)
+        result = op.result
         buffer = self.get_operand(op, 0)
         index = 0
-        if op.get_num_operands() == 2:
+        if len(op.operands) == 2:
             index = self.get_operand(op, 1)
 
         self.emit_let(T.BufferLoad(buffer, [index]), result)
@@ -195,18 +231,18 @@ class CodeGenerator():
         value = self.get_operand(op, 0)
         buffer = self.get_operand(op, 1)
         index = 0
-        if op.get_num_operands() == 3:
+        if len(op.operands) == 3:
             index = self.get_operand(op, 2)
 
         self.ib.emit(tir.BufferStore(buffer, value, [index]))
 
     def gen_memref_alloc(self, op):
-        result = op.get_result(0)
+        result = op.result
         dtype = _get_type(result).element_type.dtype
         shape = _get_shape(result)
 
         buf = self.ib.allocate(dtype, shape, scope="lsram")
-        self.id_to_var_or_buf[result.id()] = buf
+        self.mlir_to_tir_mapping[result] = buf
 
     def gen_memref_copy(self, op):
         src = self.get_operand(op, 0)
@@ -217,7 +253,7 @@ class CodeGenerator():
         self.ib.emit(dma_copy)
 
     def gen_memref_subview(self, op):
-        result = op.get_result(0)
+        result = op.result
         buffer = self.get_operand(op, 0)
         size = self.get_operand(op, 1)
 
@@ -228,36 +264,36 @@ class CodeGenerator():
             data=buffer.data,
             dtype=buffer.dtype
         )
-        self.id_to_var_or_buf[result.id()] = subview
+        self.mlir_to_tir_mapping[result] = subview
 
     def gen_arith_constant(self, op):
-        result = op.get_result(0)
+        result = op.result
         dtype = _get_type(result)
-        value = op.get_attr("value")
+        value = op.literal_value
 
         self.emit_let(tir.const(value, dtype), result)
 
     def gen_arith_index_cast(self, op):
-        result = op.get_result(0)
+        result = op.result
         arg0 = self.get_operand(op, 0)
 
         self.emit_let(T.Cast("int32", arg0), result)
 
     def gen_arith_binary(self, op, method):
-        result = op.get_result(0)
+        result = op.result
         arg0 = self.get_operand(op, 0)
         arg1 = self.get_operand(op, 1)
 
         self.emit_let(method(arg0, arg1), result)
 
     def gen_arith_cast(self, op):
-        result = op.get_result(0)
+        result = op.result
         arg0 = self.get_operand(op, 0)
 
         self.emit_let(S.cast(arg0, _get_type(result)), result)
 
     def gen_math_exp(self, op):
-        result = op.get_result(0)
+        result = op.result
         arg0 = self.get_operand(op, 0)
 
         self.emit_let(S.exp(arg0), result)
@@ -267,9 +303,9 @@ class CodeGenerator():
 
     def gen_func_func(self, op, stage):
         if stage.is_before_all_regions():
-            block = op.get_region(0).get_block(0)
-            arg_nums = block.get_num_arguments()
-            gridx = block.arg(arg_nums - 3)
+            block = op.regions[0].blocks[0]
+            arg_nums = len(block.arguments)
+            gridx = block.arguments[arg_nums - 3]
             gridx_var = self.get_or_create_var(gridx)
             self.gridx_var = gridx_var
 
@@ -277,16 +313,16 @@ class CodeGenerator():
             self.emit_let(tid, gridx)
 
         if stage.is_after_all_regions():
-            func_name = op.get_attr("sym_name")
-            block = op.get_region(0).get_block(0)
-            arg_nums = block.get_num_arguments()
+            func_name = op.name.value
+            block = op.regions[0].blocks[0]
+            arg_nums = len(block.arguments)
 
             args = []
             for i in range(arg_nums):
                 if i == arg_nums - 3:
                     args.append(self.gridx_var)
                 else:
-                    arg = block.arg(i)
+                    arg = block.arguments[i]
                     var = self.get_or_create_var(arg)
                     args.append(var)
 
@@ -300,12 +336,12 @@ class CodeGenerator():
             end = self.get_operand(op, 1)
             step = self.get_operand(op, 2)
 
-            block = op.get_region(0).get_block(0)
-            loop_iter = block.arg(0)
+            block = op.regions[0].blocks[0]
+            loop_iter = block.arguments[0]
 
             for_range = self.for_range(begin, end, step)
             loop_var = self.enter_scope(for_range)
-            self.id_to_var_or_buf[loop_iter.id()] = loop_var
+            self.mlir_to_tir_mapping[loop_iter] = loop_var
 
         if stage.is_after_all_regions():
             self.exit_scope()
@@ -327,6 +363,29 @@ class CodeGenerator():
             self.exit_scope()
 
 
+class AIPUModule:
+    def __init__(self,mod):
+        # wrap triton module to mlir module
+        self.mod = mlir_ir.Module.parse(str(mod),mlir_ir.Context())
+
+    def generic_walk(self, op, callback):
+        # operation walk
+        stage = WalkStage(op)
+        regions = op.regions
+        for region in regions:
+            callback(op, stage)
+            stage.advance()
+            for block in region.blocks:
+                for nested_op in block.operations:
+                   self.generic_walk(nested_op, callback)
+        callback(op, stage)
+
+    def walk(self,dispatch):
+        # module walk entry
+        self.generic_walk(self.mod.operation,dispatch)
+
+
 def codegenAIPU(mod):
+    mod = AIPUModule(mod)
     generator = CodeGenerator(mod)
     return generator.generate()
