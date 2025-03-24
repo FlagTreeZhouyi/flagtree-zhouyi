@@ -1,6 +1,3 @@
-/*
- * This file has been modified by Arm China team.
- */
 #include <optional>
 #include <pybind11/functional.h>
 #include <pybind11/pybind11.h>
@@ -408,17 +405,7 @@ void init_triton_ir(py::module &&m) {
       .def("get_parent_region", &Region::getParentRegion, ret::reference)
       .def("size", [](Region &self) { return self.getBlocks().size(); })
       .def("empty", &Region::empty)
-      .def("id", [](Region &self) { return (uint64_t)&self; })
-      .def("get_block", [](Region &self, int idx) -> mlir::Block & {
-        int cnt = 0;
-        for (auto &block : self.getBlocks()) {
-          if (cnt == idx) {
-            return block;
-          }
-          cnt++;
-        }
-        return self.back();
-      }, ret::reference);
+      .def("id", [](Region &self) { return (uint64_t)&self; });
 
   py::class_<Block>(m, "block", py::module_local())
       .def("arg",
@@ -585,22 +572,6 @@ void init_triton_ir(py::module &&m) {
              if (!ret)
                return py::none();
              return py::str(ret.getValue().str());
-           })
-      .def("get_attr",
-           [](Operation &self, const std::string &name) -> py::object {
-             auto attr = self.getAttr(name);
-             if (!attr)
-               return py::none();
-             if (auto ret=dyn_cast<IntegerAttr>(attr))
-               return py::int_(ret.getInt());
-             if (auto ret=dyn_cast<FloatAttr>(attr))
-               return py::float_(ret.getValue().convertToDouble());
-             if (auto ret=dyn_cast<StringAttr>(attr))
-               return py::str(ret.getValue().str());
-             if (auto ret=dyn_cast<BoolAttr>(attr))
-               return py::bool_(ret.getValue());
-
-             return py::none();
            });
 
   // dynamic_attr is used to transfer ownership of the MLIR context to the
@@ -694,17 +665,7 @@ void init_triton_ir(py::module &&m) {
       .def("walk",
            [](ModuleOp &self, const std::function<void(Operation *)> &fn) {
              self.walk(fn);
-           })
-      .def("generic_walk",
-           [](ModuleOp &self, const std::function<void(Operation *, const WalkStage &)> &fn) {
-             self.walk(fn);
            });
-
-  py::class_<WalkStage>(m, "WalkStage", py::module_local())
-      .def("is_before_all_regions", &WalkStage::isBeforeAllRegions)
-      .def("is_before_region", &WalkStage::isBeforeRegion)
-      .def("is_after_all_regions", &WalkStage::isAfterAllRegions)
-      .def("is_after_region", &WalkStage::isAfterRegion);
 
   m.def("make_attr", [](const std::vector<int> &values, MLIRContext &context) {
     return mlir::cast<Attribute>(DenseIntElementsAttr::get(
