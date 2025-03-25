@@ -21,12 +21,61 @@
 
 static c10::DeviceIndex aipu_device_index = 0;
 
+namespace c10 {
+namespace impl {
+
+struct C10_API AIPUGuardImpl final : public DeviceGuardImplInterface {
+  static constexpr DeviceType static_type = DeviceType::PrivateUse1;
+  inline static int8_t current_device = 0;
+  inline static int64_t current_stream = 0;
+
+  DeviceType type() const override {
+    return static_type;
+  }
+
+  void setDevice(Device d) const override {
+    TORCH_CHECK(d.is_privateuseone(), "Device must be PrivateUse1 type");
+    current_device = d.index();
+  }
+
+  void uncheckedSetDevice(Device d) const noexcept override {
+    current_device = d.index();
+  }
+
+  Device getDevice() const override {
+    return Device(DeviceType::PrivateUse1, current_device);
+  }
+
+  Device exchangeDevice(Device d) const override {
+    Device old_device = getDevice();
+    setDevice(d);
+    return old_device;
+  }
+
+  Stream getStream(Device d) const noexcept override {
+    int64_t stream_id = d.index();
+    return Stream(Stream::UNSAFE, d, stream_id);
+  }
+
+  Stream exchangeStream(Stream s) const noexcept override {
+    auto old_stream = getStream(s.device());
+    current_stream = s.id();
+    return old_stream;
+  }
+
+   DeviceIndex deviceCount() const noexcept override {
+    return 1;
+  }
+};
+
+}}
+
 namespace at {
 namespace detail {
 
 C10_REGISTER_GUARD_IMPL(
     PrivateUse1,
-    c10::impl::NoOpDeviceGuardImpl<DeviceType::PrivateUse1>);
+    c10::impl::AIPUGuardImpl);
 }}
 
 
@@ -250,8 +299,36 @@ int current_device() {
 }
 
 
+struct _DeviceGuard {
+  _DeviceGuard(int index, int prev_index)
+    : idx(index), prev_idx(prev_index) {}
+
+  int idx = 0;
+  int prev_idx = -1;
+};
+
+
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
     m.def("device_count", &aipu::device_count, "aipu device count");
     m.def("is_available", &aipu::is_available, "aipu is available");
     m.def("current_device", &aipu::current_device, "aipu current device");
+    m.def("_is_in_bad_fork", []() {
+      return py::bool_(false);
+    });
+    m.def("manual_seed_all", [](int seed) {
+      std::srand(seed);
+    });
+
+    py::class_<_DeviceGuard>(
+      m, "_DeviceGuard", py::module_local())
+      .def(py::init([](int index) {
+            return std::make_unique<_DeviceGuard>(index, -1);
+          }))
+      .def("__enter__", [](_DeviceGuard &self) {
+            ;
+          })
+      .def("__exit__",
+          [](_DeviceGuard &self, pybind11::object type, pybind11::object value, pybind11::object traceback) {
+            return py::bool_(false);
+          });
 }

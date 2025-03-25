@@ -3,7 +3,7 @@ from tvm.script.parser import tir as T
 from tvm.aipu import script as S
 
 
-_TYPE_MAPPING = {"f32": "float32", "f16": "float16", "i32": "int32", "index": "int32"}
+_TYPE_MAPPING = {"f32": "float32", "f16": "float16", "i32": "int32", "i64": "int32", "index": "int32"}
 _CMP_MAPPING = {0: T.EQ, 1: T.NE, 2: T.LT, 3: T.LE, 4: T.GT, 5: T.GE, 6: T.LT, 7: T.LE, 8: T.GT, 9: T.GE}
 
 
@@ -143,7 +143,7 @@ class CodeGenerator():
                 self.gen_arith_binary(op, T.Div)
             case "arith.cmpi":
                 self.gen_arith_binary(op, _CMP_MAPPING[op.get_attr("predicate")])
-            case "arith.sitofp" | "arith.extf" | "arith.truncf":
+            case "arith.sitofp" | "arith.extf" | "arith.truncf" | "arith.extsi" | "arith.trunci":
                 self.gen_arith_cast(op)
             # Math Dialect
             case "math.exp":
