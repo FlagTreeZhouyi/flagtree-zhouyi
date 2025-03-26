@@ -11,6 +11,7 @@
 #include <ATen/EmptyTensor.h>
 #include <ATen/native/DispatchStub.h>
 #include <ATen/InferSize.h>
+#include <ATen/native/DistributionTemplates.h>
 #include <ATen/native/cpu/DistributionTemplates.h>
 
 #include <standard_api.h>
@@ -225,6 +226,9 @@ at::Tensor aipu_copy_from(const at::Tensor& self, const at::Tensor& dst, bool no
   auto kind = AIPU_MEMCPY_HOST_TO_DEVICE;
   if (StrStartsWith(self.device().str(), "aipu")) {
     kind = AIPU_MEMCPY_DEVICE_TO_HOST;
+    if (StrStartsWith(dst.device().str(), "aipu")) {
+      kind = AIPU_MEMCPY_DEVICE_TO_DEVICE;
+    }
   }
 
   auto aipu_ctx_ = AIPUAllocator::aipu_ctx_;
@@ -271,6 +275,43 @@ at::Tensor& random_kernel(
   return self;
 }
 
+template <template<typename> class RND>
+at::Tensor& random_from_to_kernel(
+  at::Tensor& self,
+  int64_t from,
+  c10::optional<int64_t> to_opt,
+  c10::optional<at::Generator> gen
+) {
+  at::CPUGeneratorImpl* generator = at::get_generator_or_default<at::CPUGeneratorImpl>(
+    gen, at::detail::getDefaultCPUGenerator()
+  );
+  int64_t numel = self.numel();
+  uint64_t range = static_cast<int64_t>(*to_opt) - static_cast<int64_t>(from);
+
+  auto aipu_ctx_ = AIPUAllocator::aipu_ctx_;
+  char* data_ptr = nullptr;
+  auto status = aipu_get_va(
+    aipu_ctx_,
+    self.data_ptr(),
+    &data_ptr);
+  AIPU_DRIVER_HANDLE_ERROR(status);
+
+  AT_DISPATCH_ALL_TYPES_AND2(
+    at::ScalarType::Bool,
+    at::ScalarType::Half,
+    self.scalar_type(),
+    "random_from_to_kernel_aipu", [&]() {
+      RND<scalar_t> distribution(range, from);
+
+      auto data = reinterpret_cast<scalar_t*>(data_ptr);
+      for (int i = 0; i < numel; ++i) {
+        data[i] = static_cast<scalar_t>(distribution(generator));
+      }
+    }
+  );
+  return self;
+}
+
 TORCH_LIBRARY_IMPL(aten, PrivateUse1, m) {
   m.impl("empty.memory_format", &custom_empty_symint);
   m.impl("empty_strided", &custom_empty_strided);
@@ -279,6 +320,7 @@ TORCH_LIBRARY_IMPL(aten, PrivateUse1, m) {
   m.impl("aten::uniform_", &random_kernel<at::uniform_real_distribution>);
   m.impl("aten::normal_", &random_kernel<at::normal_distribution>);
   m.impl("aten::_copy_from", &aipu_copy_from);
+  m.impl("aten::random_.from", &random_from_to_kernel<at::uniform_int_from_to_distribution>);
 }
 
 namespace aipu {
