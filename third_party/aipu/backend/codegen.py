@@ -171,12 +171,16 @@ class CodeGenerator():
                 self.gen_arith_binary(op, T.Sub)
             case "arith.muli" | "arith.mulf":
                 self.gen_arith_binary(op, T.Mul)
-            case "arith.minsi":
+            case "arith.minsi" | "arith.minnumf":
                 self.gen_arith_binary(op, T.Min)
             case "arith.maxsi" | "arith.maxnumf":
                 self.gen_arith_binary(op, T.Max)
             case "arith.divf":
                 self.gen_arith_binary(op, T.Div)
+            case "arith.andi":
+                self.gen_arith_binary(op, T.bitwise_and)
+            case "arith.ori":
+                self.gen_arith_binary(op, T.bitwise_or)
             case "arith.cmpi":
                 self.gen_arith_binary(op, _CMP_MAPPING[op.predicate.value])
             case "arith.sitofp" | "arith.extf" | "arith.truncf" | "arith.extsi" | "arith.trunci":

@@ -1,8 +1,6 @@
 import os
 import pickle
-import subprocess
 import torch
-import numpy as np
 from pathlib import Path
 from triton.backends.compiler import GPUTarget
 from triton.backends.driver import DriverBase
@@ -53,16 +51,12 @@ class AIPULauncher(object):
 
         ex = pickle.loads(function)
         np_args = []
-        cpu_to_aipu = {}
-        for arg in args[4:]:
+        args = args[4:]
+        for arg in args:
             if isinstance(arg, torch.Tensor):
-                arg_cpu = arg.cpu()
-                np_args.append(arg_cpu.numpy())
-                cpu_to_aipu[arg_cpu] = arg
+                np_args.append(arg.cpu().numpy())
             elif isinstance(arg, StridedBuffer):
-                arg_cpu = arg._base.cpu()
-                np_args.append(arg_cpu.numpy())
-                cpu_to_aipu[arg_cpu] = arg._base
+                np_args.append(arg._base.cpu().numpy())
             else:
                 np_args.append(arg)
 
@@ -73,8 +67,10 @@ class AIPULauncher(object):
             tail_args[3] = i
             ex(*(np_args + tail_args))
 
-        for arg_cpu, arg_aipu in cpu_to_aipu.items():
-            arg_aipu.copy_(arg_cpu)
+        for i, param_info in enumerate(ex._cur_param_infos):
+            if param_info.is_output_tensor:
+                aipu_tensor = args[i] if isinstance(args[i], torch.Tensor) else args[i]._base
+                aipu_tensor.copy_(torch.from_numpy(np_args[i]))
 
 
 class AIPUDriver(DriverBase):
