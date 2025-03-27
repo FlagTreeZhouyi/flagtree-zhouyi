@@ -1,6 +1,6 @@
 [English](./README.md)
 
-## FlagTree
+## FlagTreeZhouyi
 
 FlagTree 是多后端的 Triton 编译器项目。FlagTree 致力于打造多元 AI 芯片编译器及相关工具平台，发展和壮大 Triton 上下游生态。项目当前处于初期，目标是兼容现有适配方案，统一代码仓库，快速实现单版本多后端支持。
 
