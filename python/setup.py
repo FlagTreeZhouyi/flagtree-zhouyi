@@ -588,7 +588,7 @@ def get_entry_points():
 
 
 def get_install_requires():
-    install_requires = ["filelock"]
+    install_requires = ["filelock", "llnl-hatchet"]
     return install_requires
 
 
@@ -644,7 +644,6 @@ setup(
             "numpy",
             "pytest",
             "scipy>=1.7.1",
-            "llnl-hatchet",
         ],
         "tutorials": [
             "matplotlib",
