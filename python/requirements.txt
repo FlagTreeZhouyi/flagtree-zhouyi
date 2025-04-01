@@ -1,6 +1,8 @@
-ninja
-cmake
-wheel
+setuptools>=40.8.0
+cmake>=3.18
+ninja>=1.11.1
+pybind11>=2.13.1
+lit
 GitPython
 pytest
 scipy
