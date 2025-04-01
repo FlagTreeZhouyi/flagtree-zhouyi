@@ -6,7 +6,6 @@
 #endif
 #ifdef __NVIDIA__
 #include "third_party/nvidia/include/Dialect/NVGPU/IR/Dialect.h"
-#include "third_party/nvidia/include/Dialect/NVWS/IR/Dialect.h"
 #endif
 #ifdef __PROTON__
 #include "third_party/proton/dialect/include/Dialect/Proton/IR/Dialect.h"
@@ -63,6 +62,9 @@ inline void registerTritonDialects(mlir::DialectRegistry &registry) {
   mlir::test::registerTestAllocationPass();
   mlir::test::registerTestMembarPass();
 #endif
+#ifdef __AMD__
+  mlir::test::registerTestTritonAMDGPURangeAnalysis();
+#endif
   mlir::triton::registerConvertTritonToTritonGPUPass();
   mlir::triton::gpu::registerAllocateSharedMemoryPass();
   mlir::triton::gpu::registerTritonGPUAllocateWarpGroups();
@@ -75,11 +77,10 @@ inline void registerTritonDialects(mlir::DialectRegistry &registry) {
   mlir::registerLLVMDIScope();
 
 #ifdef __AMD__
-  mlir::test::registerTestTritonAMDGPURangeAnalysis();
-
   // TritonAMDGPUToLLVM passes
   mlir::triton::registerConvertTritonAMDGPUToLLVM();
   mlir::triton::registerConvertBuiltinFuncToLLVM();
+  mlir::triton::registerDecomposeUnsupportedAMDConversions();
   mlir::triton::registerOptimizeAMDLDSUsage();
 
   // TritonAMDGPUTransforms passes
@@ -91,8 +92,6 @@ inline void registerTritonDialects(mlir::DialectRegistry &registry) {
   mlir::registerTritonAMDGPUStreamPipeline();
   mlir::registerTritonAMDGPUCanonicalizePointers();
   mlir::registerTritonAMDGPUConvertToBufferOps();
-  mlir::registerTritonAMDGPUInThreadTranspose();
-  mlir::registerTritonAMDGPUCoalesceAsyncCopy();
   mlir::triton::registerTritonAMDGPUInsertInstructionSchedHints();
   mlir::triton::registerTritonAMDGPULowerInstructionSchedHints();
 #endif
