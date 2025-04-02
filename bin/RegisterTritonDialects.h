@@ -96,14 +96,15 @@ inline void registerTritonDialects(mlir::DialectRegistry &registry) {
   mlir::triton::registerTritonAMDGPULowerInstructionSchedHints();
 #endif
 
-  registry.insert < mlir::triton::TritonDialect, mlir::cf::ControlFlowDialect,
+  registry.insert<
+      mlir::triton::TritonDialect, mlir::cf::ControlFlowDialect,
 #ifdef __NVIDIA__
       mlir::triton::nvidia_gpu::TritonNvidiaGPUDialect,
 #endif
       mlir::triton::gpu::TritonGPUDialect, mlir::math::MathDialect,
       mlir::arith::ArithDialect, mlir::scf::SCFDialect, mlir::gpu::GPUDialect,
 #ifdef __NVIDIA__
-      mlir::triton::nvgpu::NVGPUDialect, mlir::triton::nvws::NVWSDialect,
+      mlir::triton::nvgpu::NVGPUDialect,
 #endif
 #ifdef __AMD__
       mlir::triton::amdgpu::TritonAMDGPUDialect, mlir::ROCDL::ROCDLDialect,
@@ -111,5 +112,5 @@ inline void registerTritonDialects(mlir::DialectRegistry &registry) {
 #ifdef __PROTON__
       mlir::triton::proton::ProtonDialect,
 #endif
-      mlir::LLVM::LLVMDialect, mlir::NVVM::NVVMDialect();
+      mlir::LLVM::LLVMDialect, mlir::NVVM::NVVMDialect>();
 }
