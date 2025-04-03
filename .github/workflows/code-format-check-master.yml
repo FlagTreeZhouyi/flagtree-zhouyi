@@ -1,12 +1,10 @@
 name: Code-Format-Check
 
 on:
-  schedule:
-    - cron: '0 21 * * *'
   push:
-    branches: [ "main" ]
+    branches: [ "master" ]
   pull_request:
-    branches: [ "main" ]
+    branches: [ "master" ]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
