@@ -138,17 +138,18 @@ Context* context() {
   return context.get();
 }
 
+using namespace at;
 
-struct AIPUAllocator final : at::Allocator {
+struct AIPUAllocator final : Allocator {
   AIPUAllocator() = default;
 
-  at::DataPtr allocate(size_t nbytes) override {
+  DataPtr allocate(size_t nbytes) override {
     void* data = nullptr;
     status_ = aipu_malloc(aipu_ctx_, nbytes, 32, 0, &data);
     AIPU_DRIVER_HANDLE_ERROR(status_);
 
     std::cerr << "alloc with aipu allocator for " << nbytes << " bytes with ptr " << (uint64_t)data << std::endl;
-    return {data, data, &ReportAndDelete, at::Device(at::DeviceType::PrivateUse1, aipu_device_index)};
+    return {data, data, &ReportAndDelete, Device(DeviceType::PrivateUse1, aipu_device_index)};
   }
 
   static void ReportAndDelete(void* ptr) {
@@ -159,7 +160,7 @@ struct AIPUAllocator final : at::Allocator {
     AIPU_DRIVER_HANDLE_ERROR(status_);
   }
 
-  at::DeleterFnPtr raw_deleter() const override {
+  DeleterFnPtr raw_deleter() const override {
     return &ReportAndDelete;
   }
 
@@ -177,34 +178,33 @@ aipu_status_t AIPUAllocator::status_ = AIPU_STATUS_SUCCESS;
 static AIPUAllocator global_custom_alloc;
 REGISTER_ALLOCATOR(c10::DeviceType::PrivateUse1, &global_custom_alloc);
 
-
-at::Tensor custom_empty_symint(c10::IntArrayRef size,
-                               std::optional<at::ScalarType> dtype,
-                               std::optional<at::Layout> layout,
-                               std::optional<at::Device> device,
+Tensor custom_empty_symint(c10::IntArrayRef size,
+                               std::optional<ScalarType> dtype,
+                               std::optional<Layout> layout,
+                               std::optional<Device> device,
                                std::optional<bool> pin_memory,
-                               std::optional<at::MemoryFormat> memory_format) {
+                               std::optional<MemoryFormat> memory_format) {
   constexpr c10::DispatchKeySet private_use_ks(c10::DispatchKey::PrivateUse1);
   return at::detail::empty_generic(size,
     &global_custom_alloc, private_use_ks, c10::dtype_or_default(dtype), memory_format);
 }
 
-at::Tensor custom_empty_strided(c10::IntArrayRef size,
+Tensor custom_empty_strided(c10::IntArrayRef size,
                                 c10::IntArrayRef stride,
-                                std::optional<at::ScalarType> dtype_opt,
-                                std::optional<at::Layout> layout_opt,
-                                std::optional<at::Device> device_opt,
+                                std::optional<ScalarType> dtype_opt,
+                                std::optional<Layout> layout_opt,
+                                std::optional<Device> device_opt,
                                 std::optional<bool> pin_memory_opt) {
   constexpr c10::DispatchKeySet private_use_ks(c10::DispatchKey::PrivateUse1);
   auto dtype = c10::dtype_or_default(dtype_opt);
   return  at::detail::empty_strided_generic(size, stride, &global_custom_alloc, private_use_ks, dtype);
 }
 
-at::Tensor aipu_view(const at::Tensor& self, c10::IntArrayRef size) {
-  at::IntArrayRef self_sizes = self.sizes();
-  at::IntArrayRef self_strides = self.strides();
-  at::DimVector inferred_size = at::infer_size_dv(self_sizes, self.numel());
-  std::optional<at::DimVector> stride =
+Tensor aipu_view(const Tensor& self, c10::IntArrayRef size) {
+  IntArrayRef self_sizes = self.sizes();
+  IntArrayRef self_strides = self.strides();
+  DimVector inferred_size = infer_size_dv(self_sizes, self.numel());
+  std::optional<DimVector> stride =
       at::detail::computeStride(self_sizes, self_strides, inferred_size);
   TORCH_CHECK(
       stride.has_value(),
@@ -212,7 +212,7 @@ at::Tensor aipu_view(const at::Tensor& self, c10::IntArrayRef size) {
       "not compatible with input tensor's size and stride (at least one dimension"
       " spans across two contiguous subspaces). Use .reshape(...) instead.");
 
-  at::Tensor self_ = at::detail::make_tensor<c10::TensorImpl>(
+  Tensor self_ = at::detail::make_tensor<c10::TensorImpl>(
         c10::TensorImpl::VIEW,
         c10::Storage(self.storage()),
         self.key_set(),
@@ -222,7 +222,7 @@ at::Tensor aipu_view(const at::Tensor& self, c10::IntArrayRef size) {
   return self_;
 }
 
-at::Tensor aipu_copy_from(const at::Tensor& self, const at::Tensor& dst, bool non_blocking=false) {
+Tensor aipu_copy_from(const Tensor& self, const Tensor& dst, bool non_blocking=false) {
   auto kind = AIPU_MEMCPY_HOST_TO_DEVICE;
   if (StrStartsWith(self.device().str(), "aipu")) {
     kind = AIPU_MEMCPY_DEVICE_TO_HOST;
@@ -243,13 +243,13 @@ at::Tensor aipu_copy_from(const at::Tensor& self, const at::Tensor& dst, bool no
 }
 
 template <template<typename> class RND>
-at::Tensor& random_kernel(
-  at::Tensor& self,
+Tensor& random_kernel(
+  Tensor& self,
   double cond1,
   double cond2,
-  c10::optional<at::Generator> gen
+  c10::optional<Generator> gen
 ) {
-  at::CPUGeneratorImpl* generator = at::get_generator_or_default<at::CPUGeneratorImpl>(
+  CPUGeneratorImpl* generator = get_generator_or_default<CPUGeneratorImpl>(
     gen, at::detail::getDefaultCPUGenerator()
   );
   int64_t numel = self.numel();
@@ -276,13 +276,13 @@ at::Tensor& random_kernel(
 }
 
 template <template<typename> class RND>
-at::Tensor& random_from_to_kernel(
-  at::Tensor& self,
+Tensor& random_from_to_kernel(
+  Tensor& self,
   int64_t from,
   c10::optional<int64_t> to_opt,
-  c10::optional<at::Generator> gen
+  c10::optional<Generator> gen
 ) {
-  at::CPUGeneratorImpl* generator = at::get_generator_or_default<at::CPUGeneratorImpl>(
+  CPUGeneratorImpl* generator = get_generator_or_default<CPUGeneratorImpl>(
     gen, at::detail::getDefaultCPUGenerator()
   );
   int64_t numel = self.numel();
@@ -297,8 +297,8 @@ at::Tensor& random_from_to_kernel(
   AIPU_DRIVER_HANDLE_ERROR(status);
 
   AT_DISPATCH_ALL_TYPES_AND2(
-    at::ScalarType::Bool,
-    at::ScalarType::Half,
+    ScalarType::Bool,
+    ScalarType::Half,
     self.scalar_type(),
     "random_from_to_kernel_aipu", [&]() {
       RND<scalar_t> distribution(range, from);
@@ -312,15 +312,62 @@ at::Tensor& random_from_to_kernel(
   return self;
 }
 
+Scalar _local_scalar_dense_aipu(const Tensor& self) {
+  Scalar r;
+  auto aipu_ctx_ = AIPUAllocator::aipu_ctx_;
+  char* data_ptr = nullptr;
+  auto status = aipu_get_va(
+    aipu_ctx_,
+    self.data_ptr(),
+    &data_ptr);
+  AIPU_DRIVER_HANDLE_ERROR(status);
+
+  AT_DISPATCH_ALL_TYPES_AND2(
+    ScalarType::Bool,
+    ScalarType::Half,
+    self.scalar_type(),
+    "_local_scalar_dense_aipu", [&]() {
+      auto data = reinterpret_cast<scalar_t*>(data_ptr);
+      scalar_t value = static_cast<scalar_t>(*data);
+      r = Scalar(value);
+    }
+  );
+  return r;
+}
+
+Tensor& fill_scalar_aipu(Tensor& self, const Scalar& value) {
+  int64_t numel = self.numel();
+  auto aipu_ctx_ = AIPUAllocator::aipu_ctx_;
+  char* data_ptr = nullptr;
+  auto status = aipu_get_va(
+    aipu_ctx_,
+    self.data_ptr(),
+    &data_ptr);
+  AIPU_DRIVER_HANDLE_ERROR(status);
+
+  AT_DISPATCH_ALL_TYPES_AND2(
+    ScalarType::Bool,
+    ScalarType::Half,
+    self.scalar_type(),
+    "fill_scalar_aipu", [&]() {
+      auto data = reinterpret_cast<scalar_t *>(data_ptr);
+      std::fill(data, data + numel, value.to<scalar_t>());
+    }
+  );
+  return self;
+}
+
 TORCH_LIBRARY_IMPL(aten, PrivateUse1, m) {
   m.impl("empty.memory_format", &custom_empty_symint);
   m.impl("empty_strided", &custom_empty_strided);
-  m.impl("as_strided", at::native::as_strided_tensorimpl);
+  m.impl("as_strided", native::as_strided_tensorimpl);
   m.impl("aten::view", &aipu_view);
-  m.impl("aten::uniform_", &random_kernel<at::uniform_real_distribution>);
-  m.impl("aten::normal_", &random_kernel<at::normal_distribution>);
+  m.impl("aten::uniform_", &random_kernel<uniform_real_distribution>);
+  m.impl("aten::normal_", &random_kernel<normal_distribution>);
   m.impl("aten::_copy_from", &aipu_copy_from);
-  m.impl("aten::random_.from", &random_from_to_kernel<at::uniform_int_from_to_distribution>);
+  m.impl("aten::random_.from", &random_from_to_kernel<uniform_int_from_to_distribution>);
+  m.impl("aten::_local_scalar_dense", &_local_scalar_dense_aipu);
+  m.impl("aten::fill_.Scalar", &fill_scalar_aipu);
 }
 
 namespace aipu {

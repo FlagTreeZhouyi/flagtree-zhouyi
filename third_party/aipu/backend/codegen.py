@@ -189,7 +189,7 @@ class CodeGenerator():
                 self.gen_arith_binary(op, T.bitwise_and)
             case "arith.ori":
                 self.gen_arith_binary(op, T.bitwise_or)
-            case "arith.cmpi":
+            case "arith.cmpi" | "arith.cmpf":
                 self.gen_arith_binary(op, _CMP_MAPPING[op.predicate.value])
             case "arith.sitofp" | "arith.extf" | "arith.truncf" | "arith.extsi" | "arith.trunci":
                 self.gen_arith_cast(op)
