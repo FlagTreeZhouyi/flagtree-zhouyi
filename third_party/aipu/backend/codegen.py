@@ -60,12 +60,11 @@ def _get_type(value):
 
     if isinstance(ty, mlir_ir.IndexType | mlir_ir.IntegerType | mlir_ir.FloatType):
         return _convert_scalar_type(ty)
+    elif isinstance(ty, mlir_ir.VectorType):
+        return _convert_vector_type(ty)
     elif isinstance(ty, mlir_ir.MemRefType | mlir_ir.UnrankedMemRefType):
         e_dtype = _convert_scalar_type(ty.element_type)
         return ir.PointerType(ir.PrimType(e_dtype))
-    elif isinstance(ty, mlir_ir.VectorType):
-        vtype = _convert_vector_type(ty)
-        return ir.PointerType(ir.PrimType(vtype))
 
     raise RuntimeError(f"Cannot parse type {ty}")
 
@@ -183,11 +182,11 @@ class CodeGenerator():
                 self.gen_arith_binary(op, T.Min)
             case "arith.maxsi" | "arith.maxnumf":
                 self.gen_arith_binary(op, T.Max)
-            case "arith.divf":
+            case "arith.divf" | "arith.divi":
                 self.gen_arith_binary(op, T.Div)
-            case "arith.andi":
+            case "arith.andi" | "arith.andf":
                 self.gen_arith_binary(op, T.bitwise_and)
-            case "arith.ori":
+            case "arith.ori" | "arith.orf":
                 self.gen_arith_binary(op, T.bitwise_or)
             case "arith.cmpi" | "arith.cmpf":
                 self.gen_arith_binary(op, _CMP_MAPPING[op.predicate.value])
@@ -289,7 +288,7 @@ class CodeGenerator():
             # vector
             if isinstance(ty, mlir_ir.VectorType):
                 if isinstance(ty.element_type, mlir_ir.F32Type):
-                    return S.cast(list(mlir_ir.DenseFPElementsAttr(op.value)), _convert_vector_type(ty))
+                    return S.cast(list(mlir_ir.DenseFPElementsAttr(op.value)), _get_type(op.result))
             raise RuntimeError(f"Cannot parse constant {op}")
 
         expr = _create_const_expr(op)
@@ -389,7 +388,7 @@ class CodeGenerator():
         if len(op.operands) >= 2:
             index = self.get_operand(op, 1)
 
-        self.emit_let(S.vload(buffer.addr_of(index)), result)
+        self.emit_let(S.vload(buffer.addr_of(index), lanes=result.type.shape[0]), result)
 
     def gen_vstore(self, op):
         value = self.get_operand(op, 0)
