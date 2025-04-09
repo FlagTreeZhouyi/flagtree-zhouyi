@@ -1,6 +1,3 @@
-#
-# This file has been modified by Arm China team.
-#
 cmake_minimum_required(VERSION 3.18)
 
 if(POLICY CMP0116)
@@ -29,6 +26,9 @@ elseif(FLAGTREE_BACKEND STREQUAL "mthreads")
   set(CMAKE_C_COMPILER clang)
   set(CMAKE_CXX_COMPILER clang++)
   set(ENV{FLAGTREE_PLUGIN} $ENV{FLAGTREE_BACKEND})
+elseif(FLAGTREE_BACKEND STREQUAL "aipu")
+  add_definitions(-D__NVIDIA__)
+  add_definitions(-D__AMD__)
 endif()
 set(FLAGTREE_PLUGIN "$ENV{FLAGTREE_PLUGIN}")
 if(FLAGTREE_PLUGIN)
@@ -209,6 +209,9 @@ if (FLAGTREE_BACKEND STREQUAL "cambricon")
   include_directories(${PROJECT_BINARY_DIR}/include) # Tablegen'd files
   add_subdirectory(include)
   add_subdirectory(lib)
+elseif (FLAGTREE_BACKEND STREQUAL "aipu")
+  add_subdirectory(include)
+  add_subdirectory(lib)
 elseif(NOT FLAGTREE_BACKEND)
   add_subdirectory(include)
   add_subdirectory(lib)
@@ -266,10 +269,10 @@ if(TRITON_BUILD_PYTHON_MODULE)
   if (TRITON_BUILD_PROTON)
     add_definitions(-D__PROTON__)
     add_subdirectory(third_party/proton)
-    # We always build proton dialect
-    list(APPEND TRITON_PLUGIN_NAMES "proton")
-    add_subdirectory(third_party/proton/dialect)
   endif()
+  # We always build proton dialect
+  list(APPEND TRITON_PLUGIN_NAMES "proton")
+  add_subdirectory(third_party/proton/dialect)
 
   get_property(triton_libs GLOBAL PROPERTY TRITON_LIBS)
   get_property(triton_plugins GLOBAL PROPERTY TRITON_PLUGINS)
@@ -446,7 +449,7 @@ find_package(Threads REQUIRED)
 
 add_subdirectory(third_party/f2reduce)
 
-if(NOT FLAGTREE_BACKEND)
+if(NOT FLAGTREE_BACKEND OR FLAGTREE_BACKEND STREQUAL "aipu")
   add_subdirectory(bin)
   add_subdirectory(test)
 endif()

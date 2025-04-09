@@ -28,7 +28,6 @@ class AIPUOptions:
         return hashlib.sha256(key.encode("utf-8")).hexdigest()
 
 
-
 class AIPUBackend(BaseBackend):
 
     @staticmethod
@@ -52,7 +51,7 @@ class AIPUBackend(BaseBackend):
             metadata.cluster_dims[2],
         )
 
-    def get_codegen_implementation(self):
+    def get_codegen_implementation(self, options):
         return {}
 
     def get_module_map(self) -> Dict[str, ModuleType]:
@@ -108,4 +107,4 @@ class AIPUBackend(BaseBackend):
 
     @functools.lru_cache()
     def hash(self):
-        return f"aipu_builder"
+        return "aipu_builder"

@@ -30,7 +30,7 @@ void init_triton_aipu_passes_convert(py::module &&m) {
   using namespace mlir;
   ADD_PASS_WRAPPER_0("add_linalg_to_std", createConvertLinalgToStandardPass);
   ADD_PASS_WRAPPER_0("add_one_shot_bufferize", bufferization::createOneShotBufferizePass);
-  ADD_PASS_WRAPPER_0("add_buff_to_memref", createBufferizationToMemRefPass);
+  ADD_PASS_WRAPPER_0("add_buff_to_memref", createConvertBufferizationToMemRefPass);
   ADD_PASS_WRAPPER_0("add_triton_to_linalg", triton::createTritonToLinalgPass);
   ADD_PASS_WRAPPER_0("add_affine_to_std", createLowerAffinePass);
   ADD_PASS_WRAPPER_0("add_triton_to_linalg_pipeline", triton::createTritonToLinalgExperimentalPass);
