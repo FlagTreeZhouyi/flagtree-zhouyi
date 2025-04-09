@@ -1359,11 +1359,12 @@ void init_triton_ir(py::module &&m) {
            })
       // Input/Output
       .def("create_load",
-           [](TritonOpBuilder &self, Value &ptrs, CacheModifier cacheModifier,
-              EvictionPolicy evictionPolicy, bool isVolatile) -> Value {
-             return self.create<LoadOp>(ptrs, cacheModifier, evictionPolicy,
-                                        isVolatile);
-           })
+        [](TritonOpBuilder &self, Value &ptrs, CacheModifier cacheModifier,
+           EvictionPolicy evictionPolicy, bool isVolatile,std::optional<std::string> my_hints) -> Value {
+            auto myHintsAttr = my_hints ? mlir::StringAttr::get(self.getContext(), *my_hints) : mlir::StringAttr::get(self.getContext(), "");
+          return self.create<LoadOp>(ptrs, cacheModifier, evictionPolicy,
+                                     isVolatile, myHintsAttr);
+        })
       .def("create_store",
            [](TritonOpBuilder &self, Value &ptrs, Value &value,
               CacheModifier cacheModifier,
@@ -1371,15 +1372,18 @@ void init_triton_ir(py::module &&m) {
              self.create<StoreOp>(ptrs, value, cacheModifier, evictionPolicy);
            })
       .def("create_tensor_pointer_load",
-           [](TritonOpBuilder &self, Value &ptr,
-              std::vector<int32_t> &boundaryCheck,
-              std::optional<PaddingOption> paddingOption,
-              CacheModifier cacheModifier, EvictionPolicy evictionPolicy,
-              bool isVolatile) -> Value {
-             return self.create<LoadOp>(ptr, boundaryCheck, paddingOption,
-                                        cacheModifier, evictionPolicy,
-                                        isVolatile);
-           })
+            [](TritonOpBuilder &self, Value &ptr,
+               std::vector<int32_t> &boundaryCheck,
+               std::optional<PaddingOption> paddingOption,
+               CacheModifier cacheModifier, EvictionPolicy evictionPolicy,
+               bool isVolatile,
+               std::optional<std::string> my_hints) -> Value {
+              auto myHintsAttr = my_hints ? mlir::StringAttr::get(self.getContext(), *my_hints) :  mlir::StringAttr::get(self.getContext(), "");
+
+              return self.create<LoadOp>(ptr, boundaryCheck, paddingOption,
+                                         cacheModifier, evictionPolicy,
+                                         isVolatile, myHintsAttr);
+            })
       .def("create_tensor_pointer_store",
            [](TritonOpBuilder &self, Value &ptr, Value &val,
               std::vector<int32_t> &boundaryCheck, CacheModifier cacheModifier,
@@ -1388,13 +1392,15 @@ void init_triton_ir(py::module &&m) {
                                   evictionPolicy);
            })
       .def("create_masked_load",
-           [](TritonOpBuilder &self, Value &ptrs, Value &mask,
-              std::optional<Value> &other, CacheModifier cacheModifier,
-              EvictionPolicy evictionPolicy, bool isVolatile) -> Value {
-             return self.create<LoadOp>(ptrs, mask, other.value_or(Value()),
-                                        cacheModifier, evictionPolicy,
-                                        isVolatile);
-           })
+            [](TritonOpBuilder &self, Value &ptrs, Value &mask,
+               std::optional<Value> &other, CacheModifier cacheModifier,
+               EvictionPolicy evictionPolicy, bool isVolatile,
+               std::optional<std::string> my_hints) -> Value {
+              auto myHintsAttr = my_hints ? mlir::StringAttr::get(self.getContext(), *my_hints) : mlir::StringAttr::get(self.getContext(), "");
+              return self.create<LoadOp>(ptrs, mask, other.value_or(Value()),
+                                         cacheModifier, evictionPolicy,
+                                         isVolatile, myHintsAttr);
+            })
       .def("create_masked_store",
            [](TritonOpBuilder &self, Value &ptrs, Value &val, Value &mask,
               CacheModifier cacheModifier,
