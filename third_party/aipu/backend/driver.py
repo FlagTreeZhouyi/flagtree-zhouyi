@@ -35,7 +35,7 @@ class AIPUUtils(object):
 class AIPULauncher(object):
 
     def __init__(self, src, metadata):
-        ...
+        self.constants = src.constants
 
     def __call__(self, gridX, gridY, gridZ, stream, function, *args):
         try:
@@ -45,7 +45,15 @@ class AIPULauncher(object):
 
         ex = pickle.loads(function)
         np_args = []
-        args = args[4:]
+        args = list(args[4:])
+
+        # Remove constant
+        for (i, ), _ in self.constants.items():
+            try:
+                args.pop(i)
+            except IndexError:
+                ...
+
         for arg in args:
             if isinstance(arg, torch.Tensor):
                 np_args.append(arg.cpu().numpy())

@@ -598,7 +598,10 @@ download_and_copy(
 
 if helper.flagtree_backend:
     if helper.flagtree_backend == "aipu":
-        backends = [*BackendInstaller.copy(helper.default_backends + helper.extend_backends), *BackendInstaller.copy_externals()]
+        backends = [
+            *BackendInstaller.copy(helper.default_backends + helper.extend_backends),
+            *BackendInstaller.copy_externals(),
+        ]
     else:
         backends = [*BackendInstaller.copy(helper.extend_backends), *BackendInstaller.copy_externals()]
 else:
