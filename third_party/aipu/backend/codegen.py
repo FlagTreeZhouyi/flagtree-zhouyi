@@ -4,11 +4,11 @@ from tvm.aipu import script as S
 from mlir import ir as mlir_ir
 from mlir.dialects import func
 
-
 _CMP_MAPPING = {0: T.EQ, 1: T.NE, 2: T.LT, 3: T.LE, 4: T.GT, 5: T.GE, 6: T.LT, 7: T.LE, 8: T.GT, 9: T.GE}
 
 
 class WalkStage:
+
     def __init__(self, op):
         self.num_regions = len(op.regions)
         self.next_region = 0
@@ -36,9 +36,9 @@ def _get_type(value):
     ty = value.type
 
     def _get_scalar_type(type):
-        if isinstance (type, mlir_ir.IndexType):
+        if isinstance(type, mlir_ir.IndexType):
             return "int32"
-        if isinstance (type, mlir_ir.IntegerType):
+        if isinstance(type, mlir_ir.IntegerType):
             sign_str = "u" if type.is_unsigned else ""
             width = min(32, type.width)
             return f"{sign_str}int{width}"
@@ -53,7 +53,7 @@ def _get_type(value):
         e_dtype = _get_scalar_type(ty.element_type)
         return ir.PointerType(ir.PrimType(e_dtype))
     elif isinstance(ty, mlir_ir.VectorType):
-        assert ty.rand==1
+        assert ty.rand == 1
         e_dtype = _get_scalar_type(ty.element_type)
         vtype = f"{e_dtype}x{ty.shape[0]}"
         return ir.PointerType(ir.PrimType(vtype))
@@ -72,6 +72,7 @@ def _get_shape(value):
 
 
 class CodeGenerator():
+
     def __init__(self, mod) -> None:
         self.mod = mod
         self.ib = tir.ir_builder.create()
@@ -110,7 +111,7 @@ class CodeGenerator():
 
         loop_var = T.Var(self.create_var_name(), "int32")
         extent = end if begin == 0 else (end - begin)
-        annotations={"step": step}
+        annotations = {"step": step}
 
         def _exit_cb():
             if kind == "serial":
@@ -123,16 +124,14 @@ class CodeGenerator():
                 kind_id = tir.ForKind.UNROLLED
             else:
                 raise ValueError("Unknown kind")
-            self.ib.emit(
-                tir.For(
-                    loop_var,
-                    begin,
-                    extent,
-                    kind_id,
-                    self.ib._pop_seq(),
-                    annotations=annotations,
-                )
-            )
+            self.ib.emit(tir.For(
+                loop_var,
+                begin,
+                extent,
+                kind_id,
+                self.ib._pop_seq(),
+                annotations=annotations,
+            ))
 
         return tir.ir_builder.WithScope(loop_var, _exit_cb)
 
@@ -147,7 +146,7 @@ class CodeGenerator():
     def dispatch(self, op, stage):
         op_name = "func.func" if isinstance(op, func.FuncOp) else op.name
         match op_name:
-            # Memref Dialect
+        # Memref Dialect
             case "memref.reinterpret_cast":
                 self.gen_memref_reinterpret_cast(op)
             case "memref.load":
@@ -219,7 +218,7 @@ class CodeGenerator():
         if len(op.operands) == 2:
             offset = self.get_operand(op, 1)
 
-        buffer = T.Buffer((-1,), elem_offset=offset, data=arg, dtype=dtype)
+        buffer = T.Buffer((-1, ), elem_offset=offset, data=arg, dtype=dtype)
         self.mlir_to_tir_mapping[result] = buffer
 
     def gen_memref_load(self, op):
@@ -246,7 +245,7 @@ class CodeGenerator():
         shape = _get_shape(result)
 
         buf = self.ib.allocate(dtype, shape, scope="lsram")
-        self.mlir_to_tir_mapping[result] = buf
+        self.mlir_to_tir_mapping[result] = buf._buffer
 
     def gen_memref_copy(self, op):
         src = self.get_operand(op, 0)
@@ -261,13 +260,7 @@ class CodeGenerator():
         buffer = self.get_operand(op, 0)
         size = self.get_operand(op, 1)
 
-        buffer = buffer._buffer if isinstance(buffer, tir.ir_builder.BufferVar) else buffer
-        subview = T.Buffer(
-            size,
-            elem_offset=buffer.elem_offset,
-            data=buffer.data,
-            dtype=buffer.dtype
-        )
+        subview = T.Buffer(size, elem_offset=buffer.elem_offset, data=buffer.data, dtype=buffer.dtype)
         self.mlir_to_tir_mapping[result] = subview
 
     def gen_arith_constant(self, op):
@@ -330,9 +323,7 @@ class CodeGenerator():
                     var = self.get_or_create_var(arg)
                     args.append(var)
 
-            self.prim_func = tir.PrimFunc(args, self.ib.get()).with_attr(
-                "global_symbol", func_name
-            )
+            self.prim_func = tir.PrimFunc(args, self.ib.get()).with_attr("global_symbol", func_name)
 
     def gen_scf_for(self, op, stage):
         if stage.is_before_all_regions():
@@ -368,9 +359,10 @@ class CodeGenerator():
 
 
 class AIPUModule:
-    def __init__(self,mod):
+
+    def __init__(self, mod):
         # wrap triton module to mlir module
-        self.mod = mlir_ir.Module.parse(str(mod),mlir_ir.Context())
+        self.mod = mlir_ir.Module.parse(str(mod), mlir_ir.Context())
 
     def generic_walk(self, op, callback):
         # operation walk
@@ -381,12 +373,12 @@ class AIPUModule:
             stage.advance()
             for block in region.blocks:
                 for nested_op in block.operations:
-                   self.generic_walk(nested_op, callback)
+                    self.generic_walk(nested_op, callback)
         callback(op, stage)
 
-    def walk(self,dispatch):
+    def walk(self, dispatch):
         # module walk entry
-        self.generic_walk(self.mod.operation,dispatch)
+        self.generic_walk(self.mod.operation, dispatch)
 
 
 def codegenAIPU(mod):

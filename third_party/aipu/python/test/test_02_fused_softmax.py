@@ -29,6 +29,7 @@ from triton.runtime import driver
 
 DEVICE = triton.runtime.driver.active.get_active_torch_device()
 
+
 def naive_softmax(x):
     """Compute row-wise softmax of X using native pytorch
 
@@ -158,12 +159,17 @@ def softmax(x):
 # Unit Test
 # ---------
 
+
 # %%
 # We make sure that we test our kernel on a matrix with an irregular number of rows and columns.
 # This will allow us to verify that our padding mechanism works.
+def test_fused_softmax():
+    torch.manual_seed(0)
+    x = torch.randn(128, 781, device=DEVICE)
+    y_triton = softmax(x)
+    y_torch = torch.softmax(x.cpu(), axis=1)
+    assert torch.allclose(y_triton, y_torch), (y_triton, y_torch)
 
-torch.manual_seed(0)
-x = torch.randn(128, 781, device=DEVICE)
-y_triton = softmax(x)
-y_torch = torch.softmax(x.cpu(), axis=1)
-assert torch.allclose(y_triton, y_torch), (y_triton, y_torch)
+
+if __name__ == "__main__":
+    test_fused_softmax()

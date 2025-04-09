@@ -51,11 +51,9 @@ def ceil(arg0):
 
 @core.extern
 def trunc(arg0, _builder=None):
-    return core.extern_elementwise(
-        "trunc", "", [arg0], {
-            (core.dtype("fp32"), ): ("__truncf", core.dtype("fp32")),
-        }, is_pure=True, _builder=_builder
-    )
+    return core.extern_elementwise("trunc", "", [arg0], {
+        (core.dtype("fp32"), ): ("__truncf", core.dtype("fp32")),
+    }, is_pure=True, _builder=_builder)
 
 
 def exp2(arg0):
@@ -92,11 +90,9 @@ def div_rn(arg0, arg1):
 
 @core.extern
 def div_rz(arg0, arg1, _builder=None):
-    return core.extern_elementwise(
-        "div_rz", "", [arg0, arg1], {
-            (core.dtype("fp32"), core.dtype("fp32")): ("__div_rz", core.dtype("fp32")),
-        }, is_pure=True, _builder=_builder
-    )
+    return core.extern_elementwise("div_rz", "", [arg0, arg1], {
+        (core.dtype("fp32"), core.dtype("fp32")): ("__div_rz", core.dtype("fp32")),
+    }, is_pure=True, _builder=_builder)
 
 
 def div_rd(arg0, arg1):

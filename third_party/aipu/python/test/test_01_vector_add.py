@@ -79,12 +79,12 @@ def add(x: torch.Tensor, y: torch.Tensor):
 
 @triton.jit
 def add_simple_kernel(x_ptr,  # *Pointer* to first input vector.
-               y_ptr,  # *Pointer* to second input vector.
-               output_ptr,  # *Pointer* to output vector.
-               n_elements,  # Size of the vector.
-               BLOCK_SIZE: tl.constexpr,  # Number of elements each program should process.
-               # NOTE: `constexpr` so it can be used as a shape value.
-               ):
+                      y_ptr,  # *Pointer* to second input vector.
+                      output_ptr,  # *Pointer* to output vector.
+                      n_elements,  # Size of the vector.
+                      BLOCK_SIZE: tl.constexpr,  # Number of elements each program should process.
+                      # NOTE: `constexpr` so it can be used as a shape value.
+                      ):
     x = tl.load(x_ptr)
     y = tl.load(y_ptr)
     output = x + y
@@ -109,17 +109,24 @@ def add_simple(x: torch.Tensor, y: torch.Tensor):
     # running asynchronously at this point.
     return output.cpu()
 
+
 # %%
 # We can now use the above function to compute the element-wise sum of two `torch.tensor` objects and test its correctness:
 
-torch.manual_seed(0)
-size = 4432
-x = torch.rand(size, device=DEVICE)
-y = torch.rand(size, device=DEVICE)
-output_torch = x.cpu() + y.cpu()
 
-output_triton = add(x, y)
-print(output_torch)
-print(output_triton)
-print(f'The maximum difference between torch and triton is '
-      f'{torch.max(torch.abs(output_torch - output_triton))}')
+def test_vector_add():
+    torch.manual_seed(0)
+    size = 4432
+    x = torch.rand(size, device=DEVICE)
+    y = torch.rand(size, device=DEVICE)
+    output_torch = x.cpu() + y.cpu()
+
+    output_triton = add(x, y)
+    print(output_torch)
+    print(output_triton)
+    print(f'The maximum difference between torch and triton is '
+          f'{torch.max(torch.abs(output_torch - output_triton))}')
+
+
+if __name__ == "__main__":
+    test_vector_add()

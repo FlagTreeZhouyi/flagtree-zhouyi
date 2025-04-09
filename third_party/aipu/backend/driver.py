@@ -5,7 +5,6 @@ from pathlib import Path
 from triton.backends.compiler import GPUTarget
 from triton.backends.driver import DriverBase
 
-
 # ------------------------
 # Utils
 # ------------------------
@@ -24,12 +23,7 @@ class AIPUUtils(object):
 
     def __init__(self):
         self.load_binary = load_binary
-        properties_dict = {
-            "max_shared_mem": 256 * 1024,
-            "multiprocessor_count": 4,
-            "max_num_regs": 32,
-            "warpSize": 4
-        }
+        properties_dict = {"max_shared_mem": 256 * 1024, "multiprocessor_count": 4, "max_num_regs": 32, "warpSize": 4}
         self.get_device_properties = lambda device: properties_dict
 
 
@@ -46,7 +40,7 @@ class AIPULauncher(object):
     def __call__(self, gridX, gridY, gridZ, stream, function, *args):
         try:
             from flag_gems.utils.tensor_wrapper import StridedBuffer
-        except:
+        except ImportError:
             StridedBuffer = torch.Tensor
 
         ex = pickle.loads(function)
@@ -104,19 +98,16 @@ class AIPUDriver(DriverBase):
 
         try:
             torch.aipu.is_available()
-        except:
+        except AttributeError:
             # TODO(aipu-teams): Remove this path later.
             os.environ["CXX"] = "/arm/tools/gnu/gcc/9.3.0/rhe7-x86_64/bin/g++"
             current_dir = Path(__file__).resolve().parent
             extra_ldflags = [f"-L{path}" for path in os.getenv("LD_LIBRARY_PATH").split(":")]
             extra_ldflags.append("-laipudrv")
             module = cpp_extension.load(
-                name="aipu",
-                sources=[current_dir / "aipu_torch_dev.cpp"],
-                extra_include_paths=[os.getenv("ZHOUYI_LINUX_DRIVER_HOME")  + "/driver/umd/include"],
-                extra_ldflags=extra_ldflags,
-                verbose=True
-            )
+                name="aipu", sources=[current_dir / "aipu_torch_dev.cpp"],
+                extra_include_paths=[os.getenv("ZHOUYI_LINUX_DRIVER_HOME") + "/driver/umd/include"],
+                extra_ldflags=extra_ldflags, verbose=True)
 
             torch.utils.rename_privateuse1_backend("aipu")
             torch._register_device_module("aipu", module)

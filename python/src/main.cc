@@ -1,6 +1,3 @@
-/*
- * This file has been modified by Arm China team.
- */
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/Signals.h"
 #include <pybind11/pybind11.h>
