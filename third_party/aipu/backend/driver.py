@@ -2,6 +2,7 @@ import os
 import pickle
 import torch
 from pathlib import Path
+from itertools import chain
 from triton.backends.compiler import GPUTarget
 from triton.backends.driver import DriverBase
 
@@ -45,14 +46,7 @@ class AIPULauncher(object):
 
         ex = pickle.loads(function)
         np_args = []
-        args = list(args[4:])
-
-        # Remove constant
-        for (i, ), _ in self.constants.items():
-            try:
-                args.pop(i)
-            except IndexError:
-                ...
+        args = [arg for i, arg in enumerate(args[4:]) if i not in chain(*self.constants.keys())]
 
         for arg in args:
             if isinstance(arg, torch.Tensor):
