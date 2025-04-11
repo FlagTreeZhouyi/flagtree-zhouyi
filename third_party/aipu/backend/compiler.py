@@ -8,10 +8,12 @@ import functools
 import hashlib
 from typing import Any, Dict
 from types import ModuleType
+from triton.backends.aipu.analysis import determine_vectorization_factor
 
 
 @dataclass(frozen=True)
 class AIPUOptions:
+    vector_register_bits: int = 256
     num_tecs: int = 4
     num_stages: int = 2
     num_cores: int = 3
@@ -93,7 +95,10 @@ class AIPUBackend(BaseBackend):
         # add pass here
         aipu.passes.convert.add_one_shot_bufferize(pm)
         aipu.passes.convert.add_linalg_to_affine_loops(pm)
-        aipu.passes.convert.add_affine_vectorize(pm, 8)
+        pm.run(mod)
+        pm = ir.pass_manager(mod.context)
+        vfactor = determine_vectorization_factor(mod, metadata["vector_register_bits"])
+        aipu.passes.convert.add_affine_vectorize(pm, vfactor)
         aipu.passes.convert.add_lower_affine(pm)
         pm.run(mod)
         ex = codegenAIPU(mod)
