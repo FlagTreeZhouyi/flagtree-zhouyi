@@ -101,8 +101,6 @@ class AIPUDriver(DriverBase):
         try:
             torch.aipu.is_available()
         except AttributeError:
-            # TODO(aipu-teams): Remove this path later.
-            os.environ["CXX"] = "/arm/tools/gnu/gcc/9.3.0/rhe7-x86_64/bin/g++"
             current_dir = Path(__file__).resolve().parent
             extra_ldflags = [f"-L{path}" for path in os.getenv("LD_LIBRARY_PATH").split(":")]
             extra_ldflags.append("-laipudrv")
