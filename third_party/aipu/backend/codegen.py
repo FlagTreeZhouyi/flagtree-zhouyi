@@ -153,72 +153,71 @@ class CodeGenerator():
 
     def dispatch(self, op, stage):
         op_name = "func.func" if isinstance(op, func.FuncOp) else op.name
-        match op_name:
         # Memref Dialect
-            case "memref.reinterpret_cast":
-                self.gen_memref_reinterpret_cast(op)
-            case "memref.load":
-                self.gen_memref_load(op)
-            case "memref.store":
-                self.gen_memref_store(op)
-            case "memref.alloc":
-                self.gen_memref_alloc(op)
-            case "memref.copy":
-                self.gen_memref_copy(op)
-            case "memref.subview":
-                self.gen_memref_subview(op)
-            # Arith Dialect
-            case "arith.constant":
-                self.gen_arith_constant(op)
-            case "arith.index_cast":
-                self.gen_arith_index_cast(op)
-            case "arith.addf" | "arith.addi":
-                self.gen_arith_binary(op, T.Add)
-            case "arith.subf" | "arith.subi":
-                self.gen_arith_binary(op, T.Sub)
-            case "arith.muli" | "arith.mulf":
-                self.gen_arith_binary(op, T.Mul)
-            case "arith.minsi" | "arith.minnumf":
-                self.gen_arith_binary(op, T.Min)
-            case "arith.maxsi" | "arith.maxnumf":
-                self.gen_arith_binary(op, T.Max)
-            case "arith.divf" | "arith.divi":
-                self.gen_arith_binary(op, T.Div)
-            case "arith.andi" | "arith.andf":
-                self.gen_arith_binary(op, T.bitwise_and)
-            case "arith.ori" | "arith.orf":
-                self.gen_arith_binary(op, T.bitwise_or)
-            case "arith.cmpi" | "arith.cmpf":
-                self.gen_arith_binary(op, _CMP_MAPPING[op.predicate.value])
-            case "arith.sitofp" | "arith.extf" | "arith.truncf" | "arith.extsi" | "arith.trunci":
-                self.gen_arith_cast(op)
-            # Math Dialect
-            case "math.exp":
-                self.gen_math_exp(op)
-            # Func Dialect
-            case "func.return":
-                self.gen_func_return(op)
-            case "func.func":
-                self.gen_func_func(op, stage)
-            # Scf Dialect
-            case "scf.for":
-                self.gen_scf_for(op, stage)
-            case "scf.if":
-                self.gen_scf_if(op, stage)
-            case "scf.yield":
-                pass
-            # Vector Dialect
-            case "vector.transfer_read":
-                self.gen_vload(op)
-            case "vector.transfer_write":
-                self.gen_vstore(op)
-            case "vector.broadcast":
-                self.gen_vbcast(op)
-            # Others
-            case "builtin.module":
-                pass
-            case _:
-                raise RuntimeError(f"Unsupport op {op_name}.")
+        if op_name == "memref.reinterpret_cast":
+            self.gen_memref_reinterpret_cast(op)
+        elif op_name == "memref.load":
+            self.gen_memref_load(op)
+        elif op_name == "memref.store":
+            self.gen_memref_store(op)
+        elif op_name == "memref.alloc":
+            self.gen_memref_alloc(op)
+        elif op_name == "memref.copy":
+            self.gen_memref_copy(op)
+        elif op_name == "memref.subview":
+            self.gen_memref_subview(op)
+        # Arith Dialect
+        elif op_name == "arith.constant":
+            self.gen_arith_constant(op)
+        elif op_name == "arith.index_cast":
+            self.gen_arith_index_cast(op)
+        elif op_name in ("arith.addf", "arith.addi"):
+            self.gen_arith_binary(op, T.Add)
+        elif op_name in ("arith.subf", "arith.subi"):
+            self.gen_arith_binary(op, T.Sub)
+        elif op_name in ("arith.muli", "arith.mulf"):
+            self.gen_arith_binary(op, T.Mul)
+        elif op_name in ("arith.minsi", "arith.minnumf"):
+            self.gen_arith_binary(op, T.Min)
+        elif op_name in ("arith.maxsi", "arith.maxnumf"):
+            self.gen_arith_binary(op, T.Max)
+        elif op_name in ("arith.divf", "arith.divi"):
+            self.gen_arith_binary(op, T.Div)
+        elif op_name in ("arith.andi", "arith.andf"):
+            self.gen_arith_binary(op, T.bitwise_and)
+        elif op_name in ("arith.ori", "arith.orf"):
+            self.gen_arith_binary(op, T.bitwise_or)
+        elif op_name in ("arith.cmpi", "arith.cmpf"):
+            self.gen_arith_binary(op, _CMP_MAPPING[op.predicate.value])
+        elif op_name in ("arith.sitofp", "arith.extf", "arith.truncf", "arith.extsi", "arith.trunci"):
+            self.gen_arith_cast(op)
+        # Math Dialect
+        elif op_name == "math.exp":
+            self.gen_math_exp(op)
+        # Func Dialect
+        elif op_name == "func.return":
+            self.gen_func_return(op)
+        elif op_name == "func.func":
+            self.gen_func_func(op, stage)
+        # Scf Dialect
+        elif op_name == "scf.for":
+            self.gen_scf_for(op, stage)
+        elif op_name == "scf.if":
+            self.gen_scf_if(op, stage)
+        elif op_name == "scf.yield":
+            pass
+        # Vector Dialect
+        elif op_name == "vector.transfer_read":
+            self.gen_vload(op)
+        elif op_name == "vector.transfer_write":
+            self.gen_vstore(op)
+        elif op_name == "vector.broadcast":
+            self.gen_vbcast(op)
+        # Others
+        elif op_name == "builtin.module":
+            pass
+        else:
+            raise RuntimeError(f"Unsupport op {op_name}.")
 
     def generate(self):
         self.mod.walk(self.dispatch)
