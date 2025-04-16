@@ -172,28 +172,36 @@ class CodeGenerator():
         elif op_name == "arith.index_cast":
             self.gen_arith_index_cast(op)
         elif op_name in ("arith.addf", "arith.addi"):
-            self.gen_arith_binary(op, T.Add)
+            self.gen_binary(op, T.Add)
         elif op_name in ("arith.subf", "arith.subi"):
-            self.gen_arith_binary(op, T.Sub)
+            self.gen_binary(op, T.Sub)
         elif op_name in ("arith.muli", "arith.mulf"):
-            self.gen_arith_binary(op, T.Mul)
+            self.gen_binary(op, T.Mul)
         elif op_name in ("arith.minsi", "arith.minnumf"):
-            self.gen_arith_binary(op, T.Min)
-        elif op_name in ("arith.maxsi", "arith.maxnumf"):
-            self.gen_arith_binary(op, T.Max)
+            self.gen_binary(op, T.Min)
+        elif op_name in ("arith.maxsi", "arith.maxnumf", "arith.maximumf"):
+            self.gen_binary(op, T.Max)
         elif op_name in ("arith.divf", "arith.divi"):
-            self.gen_arith_binary(op, T.Div)
+            self.gen_binary(op, T.Div)
         elif op_name in ("arith.andi", "arith.andf"):
-            self.gen_arith_binary(op, T.bitwise_and)
+            self.gen_binary(op, T.bitwise_and)
         elif op_name in ("arith.ori", "arith.orf"):
-            self.gen_arith_binary(op, T.bitwise_or)
+            self.gen_binary(op, T.bitwise_or)
         elif op_name in ("arith.cmpi", "arith.cmpf"):
-            self.gen_arith_binary(op, _CMP_MAPPING[op.predicate.value])
+            self.gen_binary(op, _CMP_MAPPING[op.predicate.value])
         elif op_name in ("arith.sitofp", "arith.extf", "arith.truncf", "arith.extsi", "arith.trunci"):
             self.gen_arith_cast(op)
         # Math Dialect
         elif op_name == "math.exp":
-            self.gen_math_exp(op)
+            self.gen_unary(op, S.exp)
+        elif op_name == "math.absf":
+            self.gen_unary(op, S.abs)
+        elif op_name == "math.sin":
+            self.gen_unary(op, S.sin)
+        elif op_name == "math.cos":
+            self.gen_unary(op, S.cos)
+        elif op_name == "math.sqrt":
+            self.gen_unary(op, S.sqrt)
         # Func Dialect
         elif op_name == "func.return":
             self.gen_func_return(op)
@@ -299,7 +307,7 @@ class CodeGenerator():
 
         self.emit_let(T.Cast("int32", arg0), result)
 
-    def gen_arith_binary(self, op, method):
+    def gen_binary(self, op, method):
         result = op.result
         arg0 = self.get_operand(op, 0)
         arg1 = self.get_operand(op, 1)
@@ -312,11 +320,11 @@ class CodeGenerator():
 
         self.emit_let(S.cast(arg0, _get_type(result)), result)
 
-    def gen_math_exp(self, op):
+    def gen_unary(self, op, method):
         result = op.result
         arg0 = self.get_operand(op, 0)
 
-        self.emit_let(S.exp(arg0), result)
+        self.emit_let(method(arg0), result)
 
     def gen_func_return(self, op):
         self.ib.emit(T.ret(None))
