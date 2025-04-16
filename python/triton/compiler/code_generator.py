@@ -1229,37 +1229,55 @@ class CodeGenerator(ast.NodeVisitor):
         return next(unflatten_ir_values(handles, [callee_ret_type]))
 
     def visit_Call(self, node):
+        # 1. 获取被调用的函数对象
         fn = _unwrap_if_constexpr(self.visit(node.func))
+
+        # 2. 检查是否为静态实现的函数
         static_implementation = self.statically_implemented_functions.get(fn)
         if static_implementation is not None:
             return static_implementation(self, node)
 
+        # 3. 处理函数调用的关键字参数和位置参数
         kws = dict(self.visit(keyword) for keyword in node.keywords)
         args = [self.visit(arg) for arg in node.args]
         args = list(itertools.chain.from_iterable(x if isinstance(x, list) else [x] for x in args))
+
+        # 4. 获取当前函数调用所在的行号
+        line_num = node.lineno
+        function_def = self.jit_fn.parse()
+        line_my_hints = getattr(function_def.body[0], 'line_my_hints', {})
+        my_hints = line_my_hints.get(line_num)
+        
+
+        # 5. 处理 JIT 函数调用
         if isinstance(fn, JITFunction):
             _check_fn_args(node, fn, args)
             return self.call_JitFunction(fn, args, kws)
+
+        # 6. 处理内置函数或带有特定上下文的函数调用
         if (hasattr(fn, '__self__') and _is_triton_value(fn.__self__)) or language.core.is_builtin(fn):
             extra_kwargs = {"_builder": self.builder}
             sig = inspect.signature(fn)
             if '_generator' in sig.parameters:
                 extra_kwargs['_generator'] = self
             try:
+                # 检查是否为 tl.load 调用且有 shared_memory 注释
+                if fn.__name__ == "load" and my_hints is not None:
+                    # breakpoint()
+                    print(f"tl.load at line {line_num} has annotation {my_hints}")
+                    if 'my_hints' not in kws:
+                        kws['my_hints'] = ""
+                    if my_hints not in kws['my_hints']:
+                        kws['my_hints'] = my_hints
+                        
                 ret = fn(*args, **extra_kwargs, **kws)
-                # builtin functions return plain tuples for readability
                 if isinstance(ret, tuple):
                     ret = language.tuple(ret)
                 return ret
             except Exception as e:
-                # Normally when we raise a CompilationError, we raise it as
-                # `from None`, because the original fileline from the exception
-                # is not relevant (and often points into code_generator.py
-                # itself).  But when calling a function, we raise as `from e` to
-                # preserve the traceback of the original error, which may e.g.
-                # be in core.py.
                 raise CompilationError(self.jit_fn.src, node, None) from e
 
+        # 7. 处理内置命名空间中的函数调用
         if fn in self.builtin_namespace.values():
             args = map(_unwrap_if_constexpr, args)
         ret = fn(*args, **kws)
