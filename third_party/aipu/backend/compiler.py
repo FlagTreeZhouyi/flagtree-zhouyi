@@ -57,7 +57,7 @@ class AIPUBackend(BaseBackend):
         return {}
 
     def get_module_map(self) -> Dict[str, ModuleType]:
-        from triton.language.extra.cuda import libdevice
+        from triton.language.extra.aipu import libdevice
         return {"triton.language.extra.libdevice": libdevice}
 
     def load_dialects(self, ctx):

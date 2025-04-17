@@ -38,6 +38,8 @@ class AIPULauncher(object):
     def __init__(self, src, metadata):
         self.constants = src.constants
 
+    # TODO(aipu-teams): This is just a temporary solution for now, because the real driver interface is not ready yet.
+    # These code will be refactor later.
     def __call__(self, gridX, gridY, gridZ, stream, function, *args):
         try:
             from flag_gems.utils.tensor_wrapper import StridedBuffer
