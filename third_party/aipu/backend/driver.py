@@ -102,7 +102,7 @@ class AIPUDriver(DriverBase):
             torch.aipu.is_available()
         except AttributeError:
             current_dir = Path(__file__).resolve().parent
-            extra_ldflags = [f"-L{path}" for path in os.getenv("LD_LIBRARY_PATH").split(":")]
+            extra_ldflags = [f"-L{x.strip()}" for x in os.getenv("LD_LIBRARY_PATH", "").split(":") if x.strip() != ""]
             extra_ldflags.append("-laipudrv")
             module = cpp_extension.load(
                 name="aipu", sources=[current_dir / "aipu_torch_dev.cpp"],
