@@ -236,7 +236,7 @@ class CommonUtils:
     @staticmethod
     def get_package_dir(packages):
         package_dict = {}
-        if flagtree_backend and flagtree_backend != 'cambricon':
+        if flagtree_backend and flagtree_backend not in ("cambricon", "aipu"):
             connection = []
             backend_triton_path = f"../third_party/{flagtree_backend}/python/"
             for package in packages:
@@ -281,7 +281,7 @@ class CommonUtils:
                       "so we couldn't compile triton_shared\n")
 
         third_partys = []
-        if os.environ.get("USE_TRITON_SHARED", "ON") == "ON" and not flagtree_backend:
+        if os.environ.get("USE_TRITON_SHARED", "ON") == "ON":
             third_partys.append(flagtree_backend_info["triton_shared"])
         else:
             use_triton_shared = False
@@ -301,9 +301,9 @@ def handle_flagtree_backend():
     if flagtree_backend:
         print(f"flagtree_backend is {flagtree_backend}")
         extend_backends.append(flagtree_backend)
-        if "editable_wheel" in sys.argv:
+        if "editable_wheel" in sys.argv and flagtree_backend != "aipu":
             ext_sourcedir = os.path.abspath(f"../third_party/{flagtree_backend}/python/{ext_sourcedir}") + "/"
-    if use_triton_shared and not flagtree_backend:
+    if use_triton_shared:
         default_backends.append("triton_shared")
 
 
