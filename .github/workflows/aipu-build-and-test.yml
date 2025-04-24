@@ -1,0 +1,35 @@
+
+name: AIPU-Build-And-Test
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  aipu-build-and-test:
+    runs-on: aipu
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: FlagTree Build on AIPU
+        shell: bash
+        run: |
+          source ~/env.sh
+          source ~/env_setup.sh
+          export FLAGTREE_BACKEND=aipu
+          cd python
+          python3.10 -m pip install . --no-build-isolation
+
+      - name: FlagTree Test on AIPU
+        shell: bash
+        run: |
+          source ~/env_setup.sh
+          python3.10 third_party/aipu/python/test/test_01_vector_add.py
+          python3.10 third_party/aipu/python/test/test_02_fused_softmax.py
