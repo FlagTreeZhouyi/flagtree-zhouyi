@@ -10,8 +10,8 @@ from pathlib import Path
 import hashlib
 from dataclasses import dataclass
 
-use_triton_shared = True
-necessary_third_party = ["triton_shared"]
+use_triton_shared = False
+necessary_third_party = ["flir"]
 default_backends = ["nvidia", "amd"]
 extend_backends = []
 ext_sourcedir = "triton/_C/"
@@ -27,6 +27,9 @@ class FlagTreeBackend:
 
 
 flagtree_backend_info = {
+    "flir":
+    FlagTreeBackend(name="flir", url="git@github.com:FlagTree/flir.git",
+                    tag="e72b83ba46a5a9dd6466c7102f93fd600cde909e"),
     "triton_shared":
     FlagTreeBackend(name="triton_shared", url="https://github.com/microsoft/triton-shared.git",
                     tag="5842469a16b261e45a2c67fbfc308057622b03ee"),
@@ -274,13 +277,14 @@ class CommonUtils:
 
             print(f"Unable to clone third_party {lib.name}")
             if lib.name in necessary_third_party:
-                use_triton_shared = False
-                print("\n\ttriton_shared is compiled by default, but for "
+                use_triton_shared = False  # TODO
+                print(f"\n\t{lib.name} is compiled by default, but for "
                       "some reason we couldn't download triton_shared\n"
                       "as third_party (most likely for network reasons), "
                       "so we couldn't compile triton_shared\n")
 
         third_partys = []
+        third_partys.append(flagtree_backend_info["flir"])
         if os.environ.get("USE_TRITON_SHARED", "ON") == "ON":
             third_partys.append(flagtree_backend_info["triton_shared"])
         else:
@@ -303,6 +307,7 @@ def handle_flagtree_backend():
         extend_backends.append(flagtree_backend)
         if "editable_wheel" in sys.argv and flagtree_backend != "aipu":
             ext_sourcedir = os.path.abspath(f"../third_party/{flagtree_backend}/python/{ext_sourcedir}") + "/"
+    default_backends.append("flir")
     if use_triton_shared:
         default_backends.append("triton_shared")
 
