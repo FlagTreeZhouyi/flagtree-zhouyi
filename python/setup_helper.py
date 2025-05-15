@@ -29,7 +29,7 @@ class FlagTreeBackend:
 flagtree_backend_info = {
     "flir":
     FlagTreeBackend(name="flir", url="git@github.com:FlagTree/flir.git",
-                    tag="608e2daf3f14acbbc8e6d46a821a420164dd9462"),
+                    tag="e72b83ba46a5a9dd6466c7102f93fd600cde909e"),
     "triton_shared":
     FlagTreeBackend(name="triton_shared", url="https://github.com/microsoft/triton-shared.git",
                     tag="5842469a16b261e45a2c67fbfc308057622b03ee"),
@@ -284,6 +284,7 @@ class CommonUtils:
                       "so we couldn't compile triton_shared\n")
 
         third_partys = []
+        third_partys.append(flagtree_backend_info["flir"])
         if os.environ.get("USE_TRITON_SHARED", "ON") == "ON":
             third_partys.append(flagtree_backend_info["triton_shared"])
         else:
