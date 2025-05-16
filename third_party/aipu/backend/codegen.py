@@ -196,6 +196,8 @@ class CodeGenerator():
             # Math Dialect
             case "math.exp":
                 self.gen_math_exp(op)
+            case "math.exp2":
+                self.gen_math_exp2(op)
             # Func Dialect
             case "func.return":
                 self.gen_func_return(op)
@@ -319,6 +321,12 @@ class CodeGenerator():
         arg0 = self.get_operand(op, 0)
 
         self.emit_let(S.exp(arg0), result)
+
+    def gen_math_exp2(self, op):
+        result = op.result
+        arg0 = self.get_operand(op, 0)
+
+        self.emit_let(S.exp2(arg0), result)
 
     def gen_func_return(self, op):
         self.ib.emit(T.ret(None))
