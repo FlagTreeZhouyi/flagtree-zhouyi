@@ -23,6 +23,11 @@ class AIPUOptions:
     debug: bool = False
     sanitize_overflow: bool = True
     num_warps: int = 4
+    num_ctas: int = -1
+    num_buffers_warp_spec: int = -1
+    num_consumer_groups: int = -1
+    reg_dec_producer: int = -1
+    reg_inc_consumer: int = -1
 
     def hash(self):
         hash_dict = dict(self.__dict__)
