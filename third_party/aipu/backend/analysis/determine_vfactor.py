@@ -1,4 +1,4 @@
-from mlir import ir as mlir_ir
+from mlir import ir
 
 
 def determine_vectorization_factor(module, target_bitwidth=256, debug=False):
@@ -14,7 +14,6 @@ def determine_vectorization_factor(module, target_bitwidth=256, debug=False):
         int: Vectorization factor (1 if no affine.for found,
              otherwise target_bitwidth/min_dtype_width)
     """
-    module = mlir_ir.Module.parse(str(module), mlir_ir.Context())
     min_width = target_bitwidth
 
     def walk_callback(op):
@@ -24,11 +23,12 @@ def determine_vectorization_factor(module, target_bitwidth=256, debug=False):
             for _op in all_ops:
                 for result in _op.results:
                     elem_type = (result.type.element_type if hasattr(result.type, 'element_type') else result.type)
-                    min_width = min(min_width, elem_type.width)
+                    elem_width = 32 if isinstance(elem_type, ir.IndexType) else elem_type.width
+                    min_width = min(min_width, elem_width)
 
-        return mlir_ir.WalkResult.ADVANCE
+        return ir.WalkResult.ADVANCE
 
-    module.operation.walk(walk_callback, mlir_ir.WalkOrder.PRE_ORDER)
+    module.operation.walk(walk_callback, ir.WalkOrder.PRE_ORDER)
 
     # If no affine.for found or no valid types found , vfactor=1
     vfactor = target_bitwidth // min_width
