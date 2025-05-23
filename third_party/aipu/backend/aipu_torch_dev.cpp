@@ -142,8 +142,6 @@ struct AIPUAllocator final : Allocator {
     status_ = aipu_malloc(aipu_ctx_, nbytes, 32, 0, &data);
     AIPU_DRIVER_HANDLE_ERROR(status_);
 
-    std::cerr << "alloc with aipu allocator for " << nbytes
-              << " bytes with ptr " << (uint64_t)data << std::endl;
     return {data, data, &ReportAndDelete,
             Device(DeviceType::PrivateUse1, aipu_device_index)};
   }
@@ -346,6 +344,13 @@ struct _DeviceGuard {
   int prev_idx = -1;
 };
 
+struct _Device {
+  _Device(c10::Device device) { idx = device.index(); }
+
+  int idx = 0;
+  int prev_idx = -1;
+};
+
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
   m.def("device_count", &aipu::device_count, "aipu device count");
   m.def("is_available", &aipu::is_available, "aipu is available");
@@ -359,5 +364,13 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
       .def("__enter__", [](_DeviceGuard &self) { ; })
       .def("__exit__",
            [](_DeviceGuard &self, pybind11::object type, pybind11::object value,
+              pybind11::object traceback) { return py::bool_(false); });
+
+  py::class_<_Device>(m, "device", py::module_local())
+      .def(py::init(
+          [](c10::Device device) { return std::make_unique<_Device>(device); }))
+      .def("__enter__", [](_Device &self) { ; })
+      .def("__exit__",
+           [](_Device &self, pybind11::object type, pybind11::object value,
               pybind11::object traceback) { return py::bool_(false); });
 }

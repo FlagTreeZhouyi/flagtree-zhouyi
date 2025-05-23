@@ -1,14 +1,21 @@
 import pickle
+from triton.backends.aipu import transform, analysis
 from triton.backends.aipu.codegen import codegenAIPU
 from triton.backends.compiler import BaseBackend, GPUTarget
 from triton._C.libtriton import ir, aipu, passes
+import triton._C.libaipu_interface as aipu_interface
+from mlir.passmanager import PassManager
+from mlir.ir import Context, Module
 
 from dataclasses import dataclass
 import functools
 import hashlib
-from typing import Any, Dict
+from typing import Any, Dict, Tuple
 from types import ModuleType
-from triton.backends.aipu.analysis import determine_vectorization_factor
+
+
+def min_dot_size(target: GPUTarget):
+    return lambda lhsType, rhsType: (1, 1, 1)
 
 
 @dataclass(frozen=True)
@@ -28,6 +35,7 @@ class AIPUOptions:
     num_consumer_groups: int = -1
     reg_dec_producer: int = -1
     reg_inc_consumer: int = -1
+    allowed_dot_input_precisions: Tuple[str] = ("ieee", )
 
     def hash(self):
         hash_dict = dict(self.__dict__)
@@ -45,6 +53,7 @@ class AIPUBackend(BaseBackend):
         super().__init__(target)
         self.capability = target.arch
         self.binary_ext = "bin"
+        aipu_interface.passes.register_all_passes()
 
     def parse_options(self, opts) -> Any:
         return AIPUOptions()
@@ -59,7 +68,8 @@ class AIPUBackend(BaseBackend):
         )
 
     def get_codegen_implementation(self, options):
-        return {}
+        codegen_fns = {"min_dot_size": min_dot_size(self.target)}
+        return codegen_fns
 
     def get_module_map(self) -> Dict[str, ModuleType]:
         from triton.language.extra.aipu import libdevice
@@ -95,17 +105,24 @@ class AIPUBackend(BaseBackend):
 
     @staticmethod
     def make_aipubin(mod, metadata, opt):
-        pm = ir.pass_manager(mod.context)
-        pm.enable_debug()
+        ctx = Context()
+        ctx.allow_unregistered_dialects = True
+        pm = PassManager("builtin.module", ctx)
+        mod = Module.parse(aipu.common.generic_print(mod), ctx)
         # add pass here
-        aipu.passes.convert.add_one_shot_bufferize(pm)
-        aipu.passes.convert.add_linalg_to_affine_loops(pm)
-        pm.run(mod)
-        pm = ir.pass_manager(mod.context)
-        vfactor = determine_vectorization_factor(mod, metadata["vector_register_bits"])
-        aipu.passes.convert.add_affine_vectorize(pm, vfactor)
-        aipu.passes.convert.add_lower_affine(pm)
-        pm.run(mod)
+        pm.add("func.func(linalg-fuse-elementwise-ops)")
+        pm.add("one-shot-bufferize")
+        pm.add("func.func(convert-bool-arg-to-i8)")
+        pm.add("func.func(convert-linalg-to-affine-loops)")
+        pm.add("func.func(affine-loop-fusion)")
+        pm.run(mod.operation)
+
+        pm = PassManager("builtin.module", ctx)
+        vfactor = analysis.determine_vectorization_factor(mod, metadata["vector_register_bits"])
+        pm.add(f"func.func(affine-super-vectorize{{virtual-vector-size={vfactor}}})")
+        pm.add("func.func(lower-affine)")
+        pm.run(mod.operation)
+        transform.binding_tid(mod, ctx)
         ex = codegenAIPU(mod)
         metadata["name"] = ex._func_name
         metadata["shared"] = 1

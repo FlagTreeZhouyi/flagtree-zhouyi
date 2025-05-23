@@ -599,10 +599,6 @@ def sinh(arg0):
     ...
 
 
-def tanh(arg0):
-    ...
-
-
 def atan2(arg0, arg1):
     ...
 
@@ -711,10 +707,6 @@ def cyl_bessel_i1(arg0):
     ...
 
 
-def erf(arg0):
-    ...
-
-
 def erfinv(arg0):
     ...
 
@@ -763,10 +755,6 @@ def fma(arg0, arg1, arg2):
     ...
 
 
-def pow(arg0, arg1):
-    ...
-
-
 def tgamma(arg0):
     ...
 
@@ -793,3 +781,32 @@ def logb(arg0):
 
 def isfinited(arg0):
     ...
+
+
+def create_unary_op_wrapper(func_name, dtypes):
+
+    @core.extern
+    def unary_op(arg0, _builder=None):
+        func_impl = {(core.dtype(dtype), ): (func_name, core.dtype(dtype)) for dtype in dtypes}
+        return core.extern_elementwise("", "", [arg0], func_impl, is_pure=True, _builder=_builder)
+
+    return unary_op
+
+
+def create_binary_op_wrapper(func_name, dtypes):
+
+    @core.extern
+    def binary_op(arg0, arg1, _builder=None):
+        func_impl = {(
+            core.dtype(dtype),
+            core.dtype(dtype),
+        ): (func_name, core.dtype(dtype))
+                     for dtype in dtypes}
+        return core.extern_elementwise("", "", [arg0, arg1], func_impl, is_pure=True, _builder=_builder)
+
+    return binary_op
+
+
+pow = create_binary_op_wrapper("powf", ["fp32", "fp16"])
+tanh = create_unary_op_wrapper("tanh", ["fp32", "fp16"])
+erf = create_unary_op_wrapper("erf", ["fp32", "fp16"])

@@ -28,9 +28,9 @@
 #include <pybind11/stl_bind.h>
 
 namespace py = pybind11;
+using namespace mlir;
 
 void init_triton_aipu_passes_convert(py::module &&m) {
-  using namespace mlir;
   ADD_PASS_WRAPPER_0("add_linalg_to_std", createConvertLinalgToStandardPass);
   ADD_PASS_WRAPPER_0("add_one_shot_bufferize",
                      bufferization::createOneShotBufferizePass);
@@ -53,7 +53,20 @@ void init_triton_aipu_passes_convert(py::module &&m) {
   });
 }
 
+void init_triton_aipu_common(py::module &&m) {
+  m.def("generic_print", [](ModuleOp mod) -> std::string {
+    std::string str;
+    llvm::raw_string_ostream os(str);
+    auto printingFlags = OpPrintingFlags();
+    printingFlags.enableDebugInfo();
+    printingFlags.printGenericOpForm();
+    mod.print(os, printingFlags);
+    return str;
+  });
+}
+
 void init_triton_aipu(py::module &&m) {
+  init_triton_aipu_common(m.def_submodule("common"));
   auto passes = m.def_submodule("passes");
   init_triton_aipu_passes_convert(passes.def_submodule("convert"));
   // load dialects
