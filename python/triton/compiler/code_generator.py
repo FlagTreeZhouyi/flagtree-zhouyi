@@ -1247,7 +1247,6 @@ class CodeGenerator(ast.NodeVisitor):
         function_def = self.jit_fn.parse()
         line_my_hints = getattr(function_def.body[0], 'line_my_hints', {})
         my_hints = line_my_hints.get(line_num)
-        
 
         # 5. 处理 JIT 函数调用
         if isinstance(fn, JITFunction):
@@ -1269,7 +1268,7 @@ class CodeGenerator(ast.NodeVisitor):
                         kws['my_hints'] = ""
                     if my_hints not in kws['my_hints']:
                         kws['my_hints'] = my_hints
-                        
+
                 ret = fn(*args, **extra_kwargs, **kws)
                 if isinstance(ret, tuple):
                     ret = language.tuple(ret)

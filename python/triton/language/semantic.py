@@ -1066,7 +1066,8 @@ def _load_block_pointer(ptr, mask, other, boundary_check, padding, cache, evicti
 
     # Build IR
     return tl.tensor(
-        builder.create_tensor_pointer_load(ptr.handle, boundary_check, padding, cache, eviction, is_volatile, my_hints), dst_ty)
+        builder.create_tensor_pointer_load(ptr.handle, boundary_check, padding, cache, eviction, is_volatile, my_hints),
+        dst_ty)
 
 
 def _load_legacy(ptr, mask, other, boundary_check, padding, cache, eviction, is_volatile, my_hints, builder):
@@ -1141,7 +1142,8 @@ def load(ptr: tl.tensor, mask: Optional[tl.tensor], other: Optional[tl.tensor], 
 
     if ptr.type.is_ptr() and ptr.type.element_ty.is_block():
         # Load by a block pointer: `pointer_type<block_type<>>`
-        return _load_block_pointer(ptr, mask, other, boundary_check, padding, cache, eviction, is_volatile, my_hints, builder)
+        return _load_block_pointer(ptr, mask, other, boundary_check, padding, cache, eviction, is_volatile, my_hints,
+                                   builder)
     else:
         # Load by a tensor of pointers or a pointer of scalar: `block_type<pointer_type<>>` or `pointer_type<>`
         return _load_legacy(ptr, mask, other, boundary_check, padding, cache, eviction, is_volatile, my_hints, builder)
