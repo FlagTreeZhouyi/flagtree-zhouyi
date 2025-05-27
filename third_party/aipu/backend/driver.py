@@ -1,6 +1,8 @@
 import os
 import pickle
 import torch
+import uuid
+import numpy as np
 from pathlib import Path
 from itertools import chain
 from triton.backends.compiler import GPUTarget
@@ -33,6 +35,13 @@ class AIPUUtils(object):
 # ------------------------
 
 
+def _reset_output_path(ex):
+    parts = ex._output_dir.split("_", 3)
+    ex._output_dir = "_".join(parts[:3]) + str(uuid.uuid4().hex)
+    ex._gbuilder_dir = f"{ex._output_dir}/gbuilder"
+    ex._op_lib_path = f"{ex._gbuilder_dir}/op_lib/{ex._func_name}.o"
+
+
 class AIPULauncher(object):
 
     def __init__(self, src, metadata):
@@ -47,6 +56,7 @@ class AIPULauncher(object):
             StridedBuffer = torch.Tensor
 
         ex = pickle.loads(function)
+        _reset_output_path(ex)
         np_args = []
         args = [arg for i, arg in enumerate(args[4:]) if i not in chain(*self.constants.keys())]
 
@@ -58,12 +68,22 @@ class AIPULauncher(object):
             else:
                 np_args.append(arg)
 
+        bool_index = []
+        for i, arr in enumerate(np_args):
+            if isinstance(arr, np.ndarray) and arr.dtype == "bool":
+                np_args[i] = arr.astype(np.int8)
+                bool_index.append(i)
+
         tail_args = [gridX, gridY, gridZ, 0, 0, 0]
         tec_num = 4
 
         for i in range((gridX + tec_num - 1) // tec_num):
             tail_args[3] = i
             ex(*(np_args + tail_args))
+
+        for i, arr in enumerate(np_args):
+            if i in bool_index:
+                np_args[i] = arr.astype(np.bool_)
 
         for i, param_info in enumerate(ex._cur_param_infos):
             if param_info.is_output_tensor:
