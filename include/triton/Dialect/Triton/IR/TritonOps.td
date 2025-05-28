@@ -244,16 +244,18 @@ def TT_LoadOp : TT_Op<"load", [
       AnyTypeOf<[TT_PtrLike, TT_TensorPtr]>:$ptr,
       Optional<TT_BoolLike>:$mask,
       Optional<TT_Type>:$other,
+
       DefaultValuedAttr<DenseI32ArrayAttr, "::llvm::ArrayRef<int32_t>{}">:$boundaryCheck,
       OptionalAttr<TT_PaddingOptionAttr>:$padding,
       DefaultValuedAttr<TT_CacheModifierAttr, "::mlir::triton::CacheModifier::NONE">:$cache,
       DefaultValuedAttr<TT_EvictionPolicyAttr, "::mlir::triton::EvictionPolicy::NORMAL">:$evict,
       DefaultValuedAttr<BoolAttr, "false">:$isVolatile,
-      // 将 my_hints 定义为可选属性，并设置默认值为空字符串
+      // Define my_hints as an optional property with a default value of an empty string ("").
       DefaultValuedAttr<StrAttr, "\"\"">:$my_hints
     );
 
     let results = (outs TT_Type:$result);
+
     let builders = [
         // A tensor of pointers or a pointer to a scalar
         OpBuilder<(ins "Value":$ptr, "triton::CacheModifier":$cache,
