@@ -1269,10 +1269,17 @@ class CodeGenerator(ast.NodeVisitor):
                         kws['my_hints'] = my_hints
 
                 ret = fn(*args, **extra_kwargs, **kws)
+                # builtin functions return plain tuples for readability
                 if isinstance(ret, tuple):
                     ret = language.tuple(ret)
                 return ret
             except Exception as e:
+                # Normally when we raise a CompilationError, we raise it as
+                # `from None`, because the original fileline from the exception
+                # is not relevant (and often points into code_generator.py
+                # itself).  But when calling a function, we raise as `from e` to
+                # preserve the traceback of the original error, which may e.g.
+                # be in core.py.
                 raise CompilationError(self.jit_fn.src, node, None) from e
 
         # 7. Handle calls from built-in namespace
