@@ -271,25 +271,25 @@ def TT_LoadOp : TT_Op<"load", [
         OpBuilder<(ins "Value":$ptr, "Value":$mask, "Value":$other, "triton::CacheModifier":$cache,
                        "triton::EvictionPolicy":$evict, "bool":$isVolatile, "mlir::StringAttr":$my_hints)>,
         // A utility function to build the operation with all attributes
-        OpBuilder<(ins  "Value":$ptr, "Value":$mask, "Value":$other,
+        OpBuilder<(ins "Value":$ptr, "Value":$mask, "Value":$other,
                        "ArrayRef<int32_t>":$boundaryCheck,
                        "std::optional<triton::PaddingOption>":$padding, "triton::CacheModifier":$cache,
                        "triton::EvictionPolicy":$evict, "bool":$isVolatile, "mlir::StringAttr":$my_hints)>,
         // A tensor of pointers or a pointer to a scalar
-        OpBuilder<(ins  "Value":$ptr, "triton::CacheModifier":$cache,
+        OpBuilder<(ins "Value":$ptr, "triton::CacheModifier":$cache,
                        "triton::EvictionPolicy":$evict, "bool":$isVolatile)>,
         // A tensor pointer with boundary check and padding
-        OpBuilder<(ins  "Value":$ptr, "ArrayRef<int32_t>":$boundaryCheck,
+        OpBuilder<(ins "Value":$ptr, "ArrayRef<int32_t>":$boundaryCheck,
                        "std::optional<triton::PaddingOption>":$padding, "triton::CacheModifier":$cache,
                        "triton::EvictionPolicy":$evict, "bool":$isVolatile)>,
         // A tensor of pointers or a pointer to a scalar with mask
-        OpBuilder<(ins  "Value":$ptr, "Value":$mask, "triton::CacheModifier":$cache,
+        OpBuilder<(ins "Value":$ptr, "Value":$mask, "triton::CacheModifier":$cache,
                        "triton::EvictionPolicy":$evict, "bool":$isVolatile)>,
         // A tensor of pointers or a pointer to a scalar with mask and other
-        OpBuilder<(ins  "Value":$ptr, "Value":$mask, "Value":$other, "triton::CacheModifier":$cache,
+        OpBuilder<(ins "Value":$ptr, "Value":$mask, "Value":$other, "triton::CacheModifier":$cache,
                        "triton::EvictionPolicy":$evict, "bool":$isVolatile)>,
         // A utility function to build the operation with all attributes
-        OpBuilder<(ins  "Value":$ptr, "Value":$mask, "Value":$other,
+        OpBuilder<(ins "Value":$ptr, "Value":$mask, "Value":$other,
                        "ArrayRef<int32_t>":$boundaryCheck,
                        "std::optional<triton::PaddingOption>":$padding, "triton::CacheModifier":$cache,
                        "triton::EvictionPolicy":$evict, "bool":$isVolatile)>
