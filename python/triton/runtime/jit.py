@@ -705,7 +705,7 @@ class JITFunction(KernelInterface[T]):
     # the user might want to monkey-patch self.src dynamically.
     # Our unit tests do this, for example.
     def parse(self):
-        # 存储行号和注释信息的映射
+        # Maps line numbers to comment hints
         line_my_hints = {}
         code_str = self.src
         g = tokenize.generate_tokens(StringIO(code_str).readline)
@@ -714,8 +714,7 @@ class JITFunction(KernelInterface[T]):
                 comment = tok_text.replace(" ", "").strip()
                 if comment.startswith('#@hint:'):
                     my_hints = comment[len('#@hint:'):].strip()
-                    # breakpoint()
-                    # 记录注释所在行号
+                    # Record the line number of the comment
                     line_num = start[0]
                     line_my_hints[line_num] = my_hints
 
@@ -724,7 +723,7 @@ class JITFunction(KernelInterface[T]):
         assert len(tree.body) == 1
         assert isinstance(tree.body[0], ast.FunctionDef)
 
-        # 将行号和注释信息的映射附加到函数定义节点
+        # Attach the line number to comment mapping to the function definition node
         tree.body[0].line_my_hints = line_my_hints
         return tree
 

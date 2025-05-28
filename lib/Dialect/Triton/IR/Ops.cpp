@@ -45,7 +45,7 @@ void LoadOp::build(OpBuilder &builder, OperationState &state, Value ptr,
                 cache, evict, isVolatile);
 }
 
-// 带my_hints
+// implementatio with my_hints
 void LoadOp::build(OpBuilder &builder, OperationState &state, Value ptr,
                    CacheModifier cache, EvictionPolicy evict, bool isVolatile,
                    mlir::StringAttr my_hints) {
@@ -62,7 +62,7 @@ void LoadOp::build(OpBuilder &builder, OperationState &state, Value ptr,
                 padding, cache, evict, isVolatile);
 }
 
-// 带my_hints
+// implementatio with my_hints
 void LoadOp::build(OpBuilder &builder, OperationState &state, Value ptr,
                    ArrayRef<int32_t> boundaryCheck,
                    std::optional<PaddingOption> padding, CacheModifier cache,
@@ -80,7 +80,7 @@ void LoadOp::build(OpBuilder &builder, OperationState &state, Value ptr,
                 /*padding=*/std::nullopt, cache, evict, isVolatile);
 }
 
-// 带my_hints
+// implementatio with my_hints
 void LoadOp::build(OpBuilder &builder, OperationState &state, Value ptr,
                    Value mask, CacheModifier cache, EvictionPolicy evict,
                    bool isVolatile, mlir::StringAttr my_hints) {
@@ -97,7 +97,7 @@ void LoadOp::build(OpBuilder &builder, OperationState &state, Value ptr,
                 /*padding=*/std::nullopt, cache, evict, isVolatile);
 }
 
-// 带my_hints
+// implementatio with my_hints
 void LoadOp::build(OpBuilder &builder, OperationState &state, Value ptr,
                    Value mask, Value other, CacheModifier cache,
                    EvictionPolicy evict, bool isVolatile,
@@ -119,7 +119,8 @@ void LoadOp::build(OpBuilder &builder, OperationState &state, Value ptr,
                 builder.getDenseI32ArrayAttr(boundaryCheck), paddingAttr, cache,
                 evict, isVolatile);
 }
-// 带my_hints
+
+// implementatio with my_hints
 void LoadOp::build(OpBuilder &builder, OperationState &state, Value ptr,
                    Value mask, Value other, ArrayRef<int32_t> boundaryCheck,
                    std::optional<PaddingOption> padding, CacheModifier cache,
