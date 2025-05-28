@@ -250,7 +250,7 @@ def TT_LoadOp : TT_Op<"load", [
       DefaultValuedAttr<TT_CacheModifierAttr, "::mlir::triton::CacheModifier::NONE">:$cache,
       DefaultValuedAttr<TT_EvictionPolicyAttr, "::mlir::triton::EvictionPolicy::NORMAL">:$evict,
       DefaultValuedAttr<BoolAttr, "false">:$isVolatile,
-      // Define my_hints as an optional property with a default value of an empty string ("").
+      // TODO: now my_hints is string, default value of an empty string (""), needed redesign
       DefaultValuedAttr<StrAttr, "\"\"">:$my_hints
     );
 
