@@ -1857,7 +1857,7 @@ def dot_scaled(lhs, lhs_scale, lhs_format, rhs, rhs_scale, rhs_format, acc=None,
 
 @builtin
 def load(pointer, mask=None, other=None, boundary_check=(), padding_option="", cache_modifier="", eviction_policy="",
-         volatile=False, my_hints=None, _builder=None):
+         volatile=False, flagtree_hints=None, _builder=None):
     """
     Return a tensor of data whose values are loaded from memory at location defined by `pointer`:
 
@@ -1911,9 +1911,9 @@ def load(pointer, mask=None, other=None, boundary_check=(), padding_option="", c
     cache_modifier = _constexpr_to_value(cache_modifier)
     eviction_policy = _constexpr_to_value(eviction_policy)
     volatile = _constexpr_to_value(volatile)
-    my_hints = _constexpr_to_value(my_hints)
+    flagtree_hints = _constexpr_to_value(flagtree_hints)
     return semantic.load(pointer, mask, other, boundary_check, padding_option, cache_modifier, eviction_policy,
-                         volatile, my_hints, _builder)
+                         volatile, flagtree_hints, _builder)
 
 
 @builtin

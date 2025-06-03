@@ -1361,10 +1361,11 @@ void init_triton_ir(py::module &&m) {
       .def("create_load",
            [](TritonOpBuilder &self, Value &ptrs, CacheModifier cacheModifier,
               EvictionPolicy evictionPolicy, bool isVolatile,
-              std::optional<std::string> my_hints) -> Value {
+              std::optional<std::string> flagtree_hints) -> Value {
              auto myHintsAttr =
-                 my_hints ? mlir::StringAttr::get(self.getContext(), *my_hints)
-                          : mlir::StringAttr::get(self.getContext(), "");
+                 flagtree_hints
+                     ? mlir::StringAttr::get(self.getContext(), *flagtree_hints)
+                     : mlir::StringAttr::get(self.getContext(), "");
              return self.create<LoadOp>(ptrs, cacheModifier, evictionPolicy,
                                         isVolatile, myHintsAttr);
            })
@@ -1379,10 +1380,12 @@ void init_triton_ir(py::module &&m) {
               std::vector<int32_t> &boundaryCheck,
               std::optional<PaddingOption> paddingOption,
               CacheModifier cacheModifier, EvictionPolicy evictionPolicy,
-              bool isVolatile, std::optional<std::string> my_hints) -> Value {
+              bool isVolatile,
+              std::optional<std::string> flagtree_hints) -> Value {
              auto myHintsAttr =
-                 my_hints ? mlir::StringAttr::get(self.getContext(), *my_hints)
-                          : mlir::StringAttr::get(self.getContext(), "");
+                 flagtree_hints
+                     ? mlir::StringAttr::get(self.getContext(), *flagtree_hints)
+                     : mlir::StringAttr::get(self.getContext(), "");
 
              return self.create<LoadOp>(ptr, boundaryCheck, paddingOption,
                                         cacheModifier, evictionPolicy,
@@ -1399,10 +1402,11 @@ void init_triton_ir(py::module &&m) {
            [](TritonOpBuilder &self, Value &ptrs, Value &mask,
               std::optional<Value> &other, CacheModifier cacheModifier,
               EvictionPolicy evictionPolicy, bool isVolatile,
-              std::optional<std::string> my_hints) -> Value {
+              std::optional<std::string> flagtree_hints) -> Value {
              auto myHintsAttr =
-                 my_hints ? mlir::StringAttr::get(self.getContext(), *my_hints)
-                          : mlir::StringAttr::get(self.getContext(), "");
+                 flagtree_hints
+                     ? mlir::StringAttr::get(self.getContext(), *flagtree_hints)
+                     : mlir::StringAttr::get(self.getContext(), "");
              return self.create<LoadOp>(ptrs, mask, other.value_or(Value()),
                                         cacheModifier, evictionPolicy,
                                         isVolatile, myHintsAttr);
